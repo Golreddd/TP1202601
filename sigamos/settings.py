@@ -14,6 +14,7 @@ from decouple import Csv, config
 
 # Constantes de mensajes Django (no dependen del app registry)
 from django.contrib.messages import constants as MESSAGE_CONSTANTS
+from django.core.exceptions import ImproperlyConfigured
 
 # ──────────────────────────────────────────────────────────────────────────────
 # RUTAS BASE
@@ -119,8 +120,15 @@ WSGI_APPLICATION = 'sigamos.wsgi.application'
 # ──────────────────────────────────────────────────────────────────────────────
 _DATABASE_URL = config('DATABASE_URL', default=None)
 if _DATABASE_URL:
-    DATABASES = {'default': dj_database_url.parse(_DATABASE_URL, conn_max_age=600)}
-else:
+    # Producción/Render (o cualquier entorno con DATABASE_URL).
+    # ssl_require fuerza sslmode=require, necesario para PostgreSQL en Render.
+    DATABASES = {
+        'default': dj_database_url.parse(
+            _DATABASE_URL, conn_max_age=600, ssl_require=not DEBUG,
+        )
+    }
+elif DEBUG:
+    # Desarrollo local: variables individuales DB_* del .env.
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.postgresql',
@@ -132,6 +140,13 @@ else:
             'OPTIONS': {'client_encoding': 'UTF8'},
         }
     }
+else:
+    # Producción sin DATABASE_URL → error claro en lugar de intentar localhost.
+    raise ImproperlyConfigured(
+        'Falta la variable de entorno DATABASE_URL. En producción (DEBUG=False) '
+        'configúrala en Render → tu Web Service → Environment con la Internal '
+        'Database URL de tu base de datos PostgreSQL.'
+    )
 
 # ──────────────────────────────────────────────────────────────────────────────
 # AUTENTICACIÓN DE USUARIO
