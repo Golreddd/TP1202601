@@ -1,0 +1,32 @@
+services:
+  - type: web
+    name: smartsave
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt && python manage.py collectstatic --no-input
+    startCommand: gunicorn sigamos.wsgi:application --workers 2 --timeout 120
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DEBUG
+        value: "False"
+      - key: ALLOWED_HOSTS
+        value: ".onrender.com"
+      - key: JWT_SIGNING_KEY
+        value: "SEBASTIANRODRIGO"
+      - key: JWT_ACCESS_HOURS
+        value: "1"
+      - key: JWT_REFRESH_DAYS
+        value: "7"
+      - key: EMAIL_BACKEND
+        value: "django.core.mail.backends.console.EmailBackend"
+      - key: DEFAULT_FROM_EMAIL
+        value: "noreply@sigamos.pe"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: smartsave-db
+          property: connectionString
+
+databases:
+  - name: smartsave-db
+    plan: free

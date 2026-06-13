@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Detalle de Análisis{% endblock %}
+{% block page_title %}Detalle de Análisis ML{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <div class="page-title">📅 Análisis del {{ ultimo.creado_en|date:"d/m/Y H:i" }}</div>
+    <div class="page-sub">
+      Recomendaciones guardadas
+      {% if ultimo.registro %}· Período {{ ultimo.registro.periodo|date:"F Y"|capfirst }}{% endif %}
+      · Solo lectura (no se vuelve a ejecutar el modelo)
+    </div>
+  </div>
+  <a href="{% url 'recomendaciones:ml_insights' %}" class="btn btn-sm btn-outline">← Volver a ML Insights</a>
+</div>
+
+{% if detalle %}
+  {% include "recomendaciones/_resultado_ml.html" %}
+{% else %}
+<div class="card">
+  <div class="empty-state">
+    <div class="empty-icon">⚠️</div>
+    <h3>No se pudo reconstruir el detalle</h3>
+    <p>No fue posible recomputar las recomendaciones de este análisis. Es posible que el registro asociado haya sido eliminado.</p>
+    <a href="{% url 'recomendaciones:ml_insights' %}" class="btn btn-primary btn-sm" style="display:inline-flex;">Volver a ML Insights</a>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+{% include "recomendaciones/_resultado_ml_js.html" %}
+</script>
+{% endblock %}

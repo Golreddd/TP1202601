@@ -1,0 +1,29 @@
+{% extends "base_auth.html" %}
+{% block title %}Iniciar sesión{% endblock %}
+
+{% block content %}
+<div class="auth-title">Bienvenido de vuelta</div>
+<div class="auth-subtitle">Ingresa a tu plataforma financiera inteligente</div>
+
+<form method="post" action="{% url 'accounts:login' %}">
+  {% csrf_token %}
+
+  <div class="form-group">
+    <label class="form-label">Correo electrónico</label>
+    <input type="email" name="username" class="form-input" placeholder="tu@correo.com"
+           value="{{ request.POST.username|default:'' }}" autocomplete="email" autofocus required>
+  </div>
+
+  <div class="form-group">
+    <label class="form-label">Contraseña</label>
+    <input type="password" name="password" class="form-input" placeholder="••••••••"
+           autocomplete="current-password" required>
+  </div>
+
+  <button type="submit" class="btn btn-primary">Iniciar Sesión</button>
+</form>
+
+<div class="auth-link">
+  ¿No tienes cuenta? <a href="{% url 'accounts:register' %}">Regístrate aquí</a>
+</div>
+{% endblock %}

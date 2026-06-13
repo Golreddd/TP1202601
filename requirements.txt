@@ -1,0 +1,27 @@
+# ===== Framework web =====
+Django==6.0.5
+djangorestframework==3.17.1
+djangorestframework-simplejwt==5.5.1
+django-cors-headers==4.9.0
+
+# ===== Servidor WSGI (producción) =====
+gunicorn==21.2.0
+
+# ===== Archivos estáticos (producción) =====
+whitenoise==6.9.0
+
+# ===== Base de datos =====
+psycopg2-binary==2.9.12
+dj-database-url==2.3.0
+
+# ===== Variables de entorno =====
+python-decouple==3.8
+
+# ===== Machine Learning (versiones fijadas — solo inferencia, no re-entrenamiento) =====
+joblib==1.5.0
+numpy==2.2.6
+pandas==2.2.3
+scikit-learn==1.8.0
+xgboost==3.2.0
+shap==0.51.0
+scipy==1.17.1

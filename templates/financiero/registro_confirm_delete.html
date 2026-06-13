@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Eliminar Registro{% endblock %}
+{% block page_title %}Eliminar Registro{% endblock %}
+
+{% block content %}
+<div style="max-width:520px;margin:0 auto;">
+  <div class="card" style="padding:40px;text-align:center;">
+    <div style="font-size:48px;margin-bottom:16px;">🗑️</div>
+    <div class="page-title" style="margin-bottom:8px;">¿Eliminar este registro?</div>
+    <div class="page-sub" style="margin-bottom:24px;">
+      Esto eliminará el registro de
+      <strong>{{ registro.periodo|date:"F Y"|capfirst }}</strong>
+      de forma permanente. Esta acción no se puede deshacer.
+    </div>
+
+    <div class="card" style="background:var(--bg);margin-bottom:24px;text-align:left;">
+      <div class="card-body">
+        <div class="flex justify-between text-sm mb-3">
+          <span class="text-muted">Período</span>
+          <span class="font-semi">{{ registro.periodo|date:"F Y"|capfirst }}</span>
+        </div>
+        <div class="flex justify-between text-sm mb-3">
+          <span class="text-muted">Ingresos</span>
+          <span class="text-success font-bold">S/ {{ registro.ing_total|floatformat:2 }}</span>
+        </div>
+        <div class="flex justify-between text-sm">
+          <span class="text-muted">Gastos</span>
+          <span class="text-danger font-bold">S/ {{ registro.gasto_total|floatformat:2 }}</span>
+        </div>
+      </div>
+    </div>
+
+    <form method="post" style="display:inline;">
+      {% csrf_token %}
+      <div class="flex gap-3 justify-end">
+        <a href="{% url 'financiero:registro_list' %}" class="btn btn-outline">Cancelar</a>
+        <button type="submit" class="btn btn-danger" style="width:auto;">Sí, eliminar</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

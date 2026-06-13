@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}{{ titulo }}{% endblock %}
+{% block page_title %}{{ titulo }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <div class="page-title">{{ titulo }}</div>
+    <div class="page-sub">Define tu objetivo y cuánto llevas ahorrado</div>
+  </div>
+  <a href="{% url 'recomendaciones:metas' %}" class="btn btn-sm btn-outline">← Volver</a>
+</div>
+
+<div style="max-width:600px;">
+  <div class="card">
+    <div class="card-body">
+      <form method="post">
+        {% csrf_token %}
+
+        {% if form.non_field_errors %}
+          <div class="non-field-errors mb-4">{{ form.non_field_errors }}</div>
+        {% endif %}
+
+        <div class="form-row cols-2">
+          <div class="form-group" style="grid-column:1/-1;">
+            <label class="form-label">{{ form.nombre.label }}</label>
+            {{ form.nombre }}
+            {% if form.nombre.errors %}<div class="field-error">{{ form.nombre.errors.0 }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label class="form-label">{{ form.icono.label }}</label>
+            {{ form.icono }}
+          </div>
+          <div class="form-group">
+            <label class="form-label">{{ form.fecha_limite.label }}</label>
+            {{ form.fecha_limite }}
+          </div>
+          <div class="form-group">
+            <label class="form-label">{{ form.monto_objetivo.label }}</label>
+            {{ form.monto_objetivo }}
+            {% if form.monto_objetivo.errors %}<div class="field-error">{{ form.monto_objetivo.errors.0 }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label class="form-label">{{ form.monto_actual.label }}</label>
+            {{ form.monto_actual }}
+            {% if form.monto_actual.errors %}<div class="field-error">{{ form.monto_actual.errors.0 }}</div>{% endif %}
+          </div>
+        </div>
+
+        <div class="flex gap-3 justify-end mt-4">
+          <a href="{% url 'recomendaciones:metas' %}" class="btn btn-outline">Cancelar</a>
+          <button type="submit" class="btn btn-primary" style="width:auto;">
+            {% if es_creacion %}Crear Meta{% else %}Guardar Cambios{% endif %}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

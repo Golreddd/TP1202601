@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}Mis Registros{% endblock %}
+{% block page_title %}Mis Registros Mensuales{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <div class="page-title">Mis Registros Mensuales</div>
+    <div class="page-sub">Historial de tus ingresos y gastos por período</div>
+  </div>
+  <a href="{% url 'financiero:registro_create' %}" class="btn btn-primary btn-sm">+ Nuevo Registro</a>
+</div>
+
+{% if registros %}
+<div class="card">
+  <div class="card-body" style="padding:0;">
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Período</th>
+            <th>Ingreso Total</th>
+            <th>Bonificación</th>
+            <th>Gasto Total</th>
+            <th>Ahorro</th>
+            <th>Tasa Ahorro</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in registros %}
+          <tr>
+            <td class="font-semi">{{ r.periodo|date:"F Y"|capfirst }}</td>
+            <td class="text-success font-bold">S/ {{ r.ing_total|floatformat:2 }}</td>
+            <td>
+              {% if r.tiene_bonificacion %}
+                <span class="badge badge-green">🎁 S/ {{ r.bonif_monto|floatformat:2 }}</span>
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+            <td class="text-danger">S/ {{ r.gasto_total|floatformat:2 }}</td>
+            <td class="{% if r.ahorro_bruto >= 0 %}text-success{% else %}text-danger{% endif %} font-bold">
+              S/ {{ r.ahorro_bruto|floatformat:2 }}
+            </td>
+            <td>
+              <span class="badge {% if r.tasa_ahorro >= 20 %}badge-green{% elif r.tasa_ahorro >= 10 %}badge-orange{% else %}badge-red{% endif %}">
+                {{ r.tasa_ahorro }}%
+              </span>
+            </td>
+            <td>
+              <a href="{% url 'financiero:registro_update' r.pk %}" class="btn btn-sm btn-outline">✏️ Editar</a>
+              <a href="{% url 'financiero:registro_delete' r.pk %}" class="btn btn-sm btn-danger" style="margin-left:6px;">🗑️</a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% else %}
+<div class="card">
+  <div class="empty-state">
+    <div class="empty-icon">📋</div>
+    <h3>Sin registros aún</h3>
+    <p style="margin-bottom:16px;">Registra tus ingresos y gastos mensuales para comenzar el seguimiento.</p>
+    <a href="{% url 'financiero:registro_create' %}" class="btn btn-primary" style="width:auto;display:inline-flex;">
+      + Crear primer registro
+    </a>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

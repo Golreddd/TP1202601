@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block title %}{{ titulo }}{% endblock %}
+{% block page_title %}{{ titulo }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <div class="page-title">{{ titulo }}</div>
+    <div class="page-sub">Registra todos tus ingresos y gastos del mes</div>
+  </div>
+  <a href="{% url 'financiero:registro_list' %}" class="btn btn-sm btn-outline">← Volver</a>
+</div>
+
+<form method="post">
+  {% csrf_token %}
+
+  {% if form.non_field_errors %}
+    <div class="non-field-errors mb-6">{{ form.non_field_errors }}</div>
+  {% endif %}
+
+  <!-- Período -->
+  <div class="card mb-6">
+    <div class="card-header mb-4">
+      <div class="card-title">📅 Período</div>
+    </div>
+    <div class="card-body" style="padding-top:0;">
+      <div style="max-width:240px;">
+        <label class="form-label">{{ form.periodo.label }}</label>
+        {{ form.periodo }}
+        {% if form.periodo.errors %}<div class="field-error">{{ form.periodo.errors.0 }}</div>{% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Ingresos -->
+  <div class="card mb-6">
+    <div class="card-header mb-4">
+      <div class="card-title">💰 Ingresos</div>
+    </div>
+    <div class="card-body" style="padding-top:0;">
+      <div class="form-row cols-2">
+        <div class="form-group">
+          <label class="form-label">{{ form.ing_planilla.label }}</label>
+          {{ form.ing_planilla }}
+          {% if form.ing_planilla.errors %}<div class="field-error">{{ form.ing_planilla.errors.0 }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label class="form-label">{{ form.ing_informal.label }}</label>
+          {{ form.ing_informal }}
+          {% if form.ing_informal.errors %}<div class="field-error">{{ form.ing_informal.errors.0 }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label class="form-label">🎁 {{ form.bonif_monto.label }}</label>
+          {{ form.bonif_monto }}
+          <div class="page-sub" style="margin-top:4px;">Ingreso extra del mes. Se suma a tu planilla para el análisis.</div>
+          {% if form.bonif_monto.errors %}<div class="field-error">{{ form.bonif_monto.errors.0 }}</div>{% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Gastos -->
+  <div class="card mb-6">
+    <div class="card-header mb-4">
+      <div class="card-title">💳 Gastos por Categoría</div>
+    </div>
+    <div class="card-body" style="padding-top:0;">
+      <div class="form-row cols-2">
+        <div class="form-group">
+          <label class="form-label">🍔 {{ form.gasto_alimentos.label }}</label>
+          {{ form.gasto_alimentos }}
+        </div>
+        <div class="form-group">
+          <label class="form-label">👗 {{ form.gasto_vestido.label }}</label>
+          {{ form.gasto_vestido }}
+        </div>
+        <div class="form-group">
+          <label class="form-label">🏠 {{ form.gasto_vivienda_servicios.label }}</label>
+          {{ form.gasto_vivienda_servicios }}
+        </div>
+        <div class="form-group">
+          <label class="form-label">💊 {{ form.gasto_salud.label }}</label>
+          {{ form.gasto_salud }}
+        </div>
+        <div class="form-group">
+          <label class="form-label">🚌 {{ form.gasto_transporte.label }}</label>
+          {{ form.gasto_transporte }}
+        </div>
+        <div class="form-group">
+          <label class="form-label">📱 {{ form.gasto_comunicaciones.label }}</label>
+          {{ form.gasto_comunicaciones }}
+        </div>
+        <div class="form-group">
+          <label class="form-label">🎓 {{ form.gasto_educacion.label }}</label>
+          {{ form.gasto_educacion }}
+        </div>
+        <div class="form-group">
+          <label class="form-label">🛒 {{ form.gasto_otros_bienes.label }}</label>
+          {{ form.gasto_otros_bienes }}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Acciones -->
+  <div class="flex gap-3 justify-end">
+    <a href="{% url 'financiero:registro_list' %}" class="btn btn-outline">Cancelar</a>
+    <button type="submit" class="btn btn-primary" style="width:auto;">
+      {% if es_creacion %}Guardar Registro{% else %}Actualizar Registro{% endif %}
+    </button>
+  </div>
+
+</form>
+{% endblock %}

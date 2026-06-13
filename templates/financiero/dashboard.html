@@ -1,0 +1,189 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+
+{% block content %}
+<!-- Cabecera -->
+<div class="page-header">
+  <div>
+    <div class="page-title">Hola, {{ user.nickname|default:user.email }} 👋</div>
+    <div class="page-sub">Tu resumen financiero de SmartSave</div>
+  </div>
+  <a href="{% url 'financiero:registro_create' %}" class="btn btn-primary btn-sm">+ Nuevo Registro</a>
+</div>
+
+{% if tiene_datos %}
+
+<!-- ===== STAT CARDS ===== -->
+<div class="stats-grid mb-6">
+  <div class="stat-card blue">
+    <div class="stat-icon">💰</div>
+    <div class="stat-label">Ingreso Mensual</div>
+    <div class="stat-value">S/ {{ ultimo.ing_total|floatformat:0 }}</div>
+    <div class="stat-change">Planilla + Informal</div>
+  </div>
+  <div class="stat-card green">
+    <div class="stat-icon">💳</div>
+    <div class="stat-label">Gastos del Mes</div>
+    <div class="stat-value">S/ {{ ultimo.gasto_total|floatformat:0 }}</div>
+    <div class="stat-change">Total 8 categorías</div>
+  </div>
+  <div class="stat-card orange">
+    <div class="stat-icon">🏦</div>
+    <div class="stat-label">Ahorro Actual</div>
+    <div class="stat-value">S/ {{ ultimo.ahorro_bruto|floatformat:0 }}</div>
+    <div class="stat-change {% if ultimo.ahorro_bruto > 0 %}up{% else %}down{% endif %}">
+      {% if ultimo.ahorro_bruto > 0 %}▲{% else %}▼{% endif %}
+      {{ ultimo.tasa_ahorro }}% tasa de ahorro
+    </div>
+  </div>
+  <div class="stat-card purple">
+    <div class="stat-icon">📋</div>
+    <div class="stat-label">Registros Totales</div>
+    <div class="stat-value">{{ registros|length }}</div>
+    <div class="stat-change">Últimos 6 meses</div>
+  </div>
+</div>
+
+<!-- ===== GRÁFICOS ===== -->
+<div class="grid-cols-3-1 mb-6">
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">Ingresos vs Gastos</div>
+      <span class="tag">Últimos {{ registros|length }} meses</span>
+    </div>
+    <div class="card-body">
+      <div class="chart-container">
+        <canvas id="dashBarChart"></canvas>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">Distribución de Gastos</div>
+    </div>
+    <div class="card-body">
+      <div class="chart-container">
+        <canvas id="dashPieChart"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== METAS + INSIGHTS ===== -->
+<div class="grid-2">
+
+  <!-- Metas de ahorro -->
+  <div class="card">
+    <div class="card-header mb-4">
+      <div class="card-title">Progreso de Metas</div>
+      <a href="{% url 'recomendaciones:metas' %}" class="btn btn-sm btn-outline">Ver todas</a>
+    </div>
+    <div class="card-body" style="padding-top:0;">
+      {% if metas %}
+        {% for meta in metas %}
+          <div style="margin-bottom:18px;">
+            <div class="flex flex-center justify-between mb-4">
+              <span class="font-semi text-sm">{{ meta.icono }} {{ meta.nombre }}</span>
+              <span class="font-bold text-primary">{{ meta.porcentaje }}%</span>
+            </div>
+            <div class="progress-bar">
+              <div class="progress-fill {% cycle 'green' 'blue' 'orange' %}"
+                   style="width:{{ meta.porcentaje }}%"></div>
+            </div>
+            <div class="text-xs text-muted mt-4">
+              S/ {{ meta.monto_actual|floatformat:0 }} de S/ {{ meta.monto_objetivo|floatformat:0 }}
+            </div>
+          </div>
+        {% endfor %}
+      {% else %}
+        <div class="empty-state">
+          <div class="empty-icon">🎯</div>
+          <h3>Sin metas activas</h3>
+          <p><a href="{% url 'recomendaciones:meta_create' %}">Crea tu primera meta de ahorro</a></p>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- ML Insight -->
+  <div class="card">
+    <div class="card-header mb-4">
+      <div class="card-title">💡 SmartSave Insights</div>
+    </div>
+    <div class="card-body" style="padding-top:0;">
+      {% if ultimo_ml %}
+        <div class="insight-card">
+          <div class="insight-header">
+            <div class="insight-icon {% if ultimo_ml.alcanza_meta %}green{% else %}orange{% endif %}">🤖</div>
+            <div class="insight-title">Último análisis ML — {{ ultimo_ml.cluster_label }}</div>
+          </div>
+          <div class="insight-text">
+            Ahorro predicho: <strong>S/ {{ ultimo_ml.ahorro_actual|floatformat:0 }}</strong> ·
+            Meta: <strong>S/ {{ ultimo_ml.meta_validada|floatformat:0 }}</strong>
+          </div>
+        </div>
+        <div class="insight-card">
+          <div class="insight-header">
+            <div class="insight-icon blue">📊</div>
+            <div class="insight-title">Tasa de ahorro — {{ ultimo.tasa_ahorro }}%</div>
+          </div>
+          <div class="insight-text">
+            {% if ultimo.tasa_ahorro >= 20 %}
+              ¡Excelente! Superas el 20% recomendado. Sigue así.
+            {% elif ultimo.tasa_ahorro >= 10 %}
+              Vas bien, pero puedes mejorar. Meta: superar el 20%.
+            {% else %}
+              Tu ahorro es bajo. Revisa gastos en ML Insights.
+            {% endif %}
+          </div>
+        </div>
+        <a href="{% url 'recomendaciones:ml_insights' %}" class="btn btn-accent btn-sm btn-full mt-4">
+          Ver ML Insights completo
+        </a>
+      {% else %}
+        <div class="empty-state">
+          <div class="empty-icon">🤖</div>
+          <h3>Sin análisis ML aún</h3>
+          <p style="margin-bottom:12px;">Ejecuta tu primer análisis para obtener recomendaciones personalizadas.</p>
+          <a href="{% url 'recomendaciones:ml_insights' %}" class="btn btn-accent btn-sm">Ir a ML Insights</a>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+</div>
+
+{% else %}
+<!-- Estado vacío -->
+<div class="card" style="padding:60px 40px;text-align:center;">
+  <div style="font-size:56px;margin-bottom:16px;">📊</div>
+  <div class="page-title" style="margin-bottom:8px;">¡Bienvenido a SmartSave!</div>
+  <div class="page-sub" style="margin-bottom:28px;">
+    Crea tu primer registro mensual para comenzar a visualizar tu salud financiera.
+  </div>
+  <a href="{% url 'financiero:registro_create' %}" class="btn btn-primary" style="width:auto;display:inline-flex;">
+    + Crear mi primer registro
+  </a>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const mesesLabels  = {{ meses_labels|safe }};
+const ingresosData = {{ ingresos_data|safe }};
+const gastosData   = {{ gastos_data|safe }};
+const gastosLabels = {{ gastos_labels|safe }};
+const gastosVals   = {{ gastos_valores|safe }};
+
+document.addEventListener('DOMContentLoaded', () => {
+  if (mesesLabels.length) {
+    mkBar('dashBarChart', mesesLabels, ingresosData, gastosData);
+  }
+  if (gastosVals.length) {
+    mkDoughnut('dashPieChart', gastosLabels, gastosVals);
+  }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+{% block title %}Perfil{% endblock %}
+{% block page_title %}Perfil de Usuario{% endblock %}
+
+{% block content %}
+<!-- Header de perfil -->
+<div class="profile-header mb-6">
+  <div class="profile-avatar-big">{{ user.nickname|default:user.email|first|upper }}</div>
+  <div>
+    <div class="profile-name">{{ user.nickname }}</div>
+    <div class="profile-email">{{ user.email }}</div>
+    <div class="profile-role-badge">
+      {% if user.is_staff %}Administrador del Sistema{% else %}Usuario SmartSave{% endif %}
+    </div>
+  </div>
+</div>
+
+<div class="grid-2">
+
+  <!-- ===== Información personal ===== -->
+  <div>
+    <div class="card mb-6">
+      <div class="card-header mb-4">
+        <div class="card-title">Información Personal</div>
+      </div>
+      <div class="card-body" style="padding-top:0;">
+        <form method="post">
+          {% csrf_token %}
+          <input type="hidden" name="form_type" value="perfil">
+
+          {% if perfil_form.non_field_errors %}
+            <div class="non-field-errors">{{ perfil_form.non_field_errors }}</div>
+          {% endif %}
+
+          <div class="form-group">
+            <label class="form-label">{{ perfil_form.nickname.label }}</label>
+            {{ perfil_form.nickname }}
+            {% if perfil_form.nickname.errors %}<div class="field-error">{{ perfil_form.nickname.errors.0 }}</div>{% endif %}
+          </div>
+          <div class="form-group">
+            <label class="form-label">{{ perfil_form.email.label }}</label>
+            {{ perfil_form.email }}
+            {% if perfil_form.email.errors %}<div class="field-error">{{ perfil_form.email.errors.0 }}</div>{% endif %}
+          </div>
+          <div class="form-row cols-2">
+            <div class="form-group">
+              <label class="form-label">{{ perfil_form.telefono.label }}</label>
+              {{ perfil_form.telefono }}
+            </div>
+            <div class="form-group">
+              <label class="form-label">{{ perfil_form.ciudad.label }}</label>
+              {{ perfil_form.ciudad }}
+            </div>
+          </div>
+          <button type="submit" class="btn btn-primary btn-sm">Guardar Cambios</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- ===== Perfil ML ===== -->
+    <div class="card">
+      <div class="card-header mb-4">
+        <div class="card-title">🤖 Perfil para Análisis ML</div>
+      </div>
+      <div class="card-body" style="padding-top:0;">
+        <form method="post">
+          {% csrf_token %}
+          <input type="hidden" name="form_type" value="perfil_ml">
+
+          {% if perfil_ml_form.non_field_errors %}
+            <div class="non-field-errors">{{ perfil_ml_form.non_field_errors }}</div>
+          {% endif %}
+
+          <div class="form-row cols-3">
+            <div class="form-group">
+              <label class="form-label">{{ perfil_ml_form.edad.label }}</label>
+              {{ perfil_ml_form.edad }}
+              {% if perfil_ml_form.edad.errors %}<div class="field-error">{{ perfil_ml_form.edad.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+              <label class="form-label">{{ perfil_ml_form.nivel_educ.label }}</label>
+              {{ perfil_ml_form.nivel_educ }}
+              {% if perfil_ml_form.nivel_educ.errors %}<div class="field-error">{{ perfil_ml_form.nivel_educ.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+              <label class="form-label">{{ perfil_ml_form.miembros_hogar.label }}</label>
+              {{ perfil_ml_form.miembros_hogar }}
+              {% if perfil_ml_form.miembros_hogar.errors %}<div class="field-error">{{ perfil_ml_form.miembros_hogar.errors.0 }}</div>{% endif %}
+            </div>
+          </div>
+
+          {% if not user.perfil_completo %}
+            <div class="warning-box mb-4">
+              <span>⚠️</span>
+              <p>Completa tu perfil financiero para obtener análisis ML más precisos.</p>
+            </div>
+          {% else %}
+            <div class="info-box mb-4">✅ Perfil completo — el análisis ML usará todos tus datos.</div>
+          {% endif %}
+
+          <button type="submit" class="btn btn-primary btn-sm">Actualizar Perfil ML</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Cambiar contraseña ===== -->
+  <div class="card" style="align-self:start;">
+    <div class="card-header mb-4">
+      <div class="card-title">🔒 Seguridad</div>
+    </div>
+    <div class="card-body" style="padding-top:0;">
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="form_type" value="password">
+
+        {% if pw_form.non_field_errors %}
+          <div class="non-field-errors">{{ pw_form.non_field_errors }}</div>
+        {% endif %}
+
+        <div class="form-group">
+          <label class="form-label">{{ pw_form.password_actual.label }}</label>
+          {{ pw_form.password_actual }}
+          {% if pw_form.password_actual.errors %}<div class="field-error">{{ pw_form.password_actual.errors.0 }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label class="form-label">{{ pw_form.password_nuevo.label }}</label>
+          {{ pw_form.password_nuevo }}
+          {% if pw_form.password_nuevo.errors %}<div class="field-error">{{ pw_form.password_nuevo.errors.0 }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label class="form-label">{{ pw_form.password_nuevo2.label }}</label>
+          {{ pw_form.password_nuevo2 }}
+          {% if pw_form.password_nuevo2.errors %}<div class="field-error">{{ pw_form.password_nuevo2.errors.0 }}</div>{% endif %}
+        </div>
+        <button type="submit" class="btn btn-primary btn-sm">Cambiar Contraseña</button>
+      </form>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

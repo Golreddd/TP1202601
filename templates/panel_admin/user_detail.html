@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}Admin — {{ usuario.nickname|default:usuario.email }}{% endblock %}
+{% block page_title %}Detalle de Usuario{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <div class="page-title">{{ usuario.nickname|default:usuario.email }}</div>
+    <div class="page-sub">Detalle completo del usuario</div>
+  </div>
+  <a href="{% url 'panel_admin:user_list' %}" class="btn btn-sm btn-outline">← Volver</a>
+</div>
+
+<div class="grid-2">
+
+  <!-- Info del usuario -->
+  <div class="card">
+    <div class="card-header mb-4">
+      <div class="card-title">Información Personal</div>
+      <span class="badge {% if usuario.is_active %}badge-green{% else %}badge-red{% endif %}">
+        {% if usuario.is_active %}Activo{% else %}Inactivo{% endif %}
+      </span>
+    </div>
+    <div class="card-body" style="padding-top:0;">
+      <div class="flex justify-between text-sm mb-4">
+        <span class="text-muted">Nickname</span>
+        <span class="font-semi">{{ usuario.nickname|default:"—" }}</span>
+      </div>
+      <div class="flex justify-between text-sm mb-4">
+        <span class="text-muted">Correo</span>
+        <span>{{ usuario.email }}</span>
+      </div>
+      <div class="flex justify-between text-sm mb-4">
+        <span class="text-muted">Rol</span>
+        <span class="badge {% if usuario.is_staff %}badge-purple{% else %}badge-blue{% endif %}">{{ usuario.nombre_rol }}</span>
+      </div>
+      <div class="flex justify-between text-sm mb-4">
+        <span class="text-muted">Ciudad</span>
+        <span>{{ usuario.ciudad|default:"—" }}</span>
+      </div>
+      <div class="flex justify-between text-sm mb-4">
+        <span class="text-muted">Teléfono</span>
+        <span>{{ usuario.telefono|default:"—" }}</span>
+      </div>
+      <div class="flex justify-between text-sm mb-4">
+        <span class="text-muted">Registro</span>
+        <span>{{ usuario.date_joined|date:"d/m/Y H:i" }}</span>
+      </div>
+      <div class="flex justify-between text-sm mb-4">
+        <span class="text-muted">Último acceso</span>
+        <span>{{ usuario.last_login|date:"d/m/Y H:i"|default:"Nunca" }}</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Perfil ML + Actividad -->
+  <div>
+    <div class="card mb-6">
+      <div class="card-header mb-4">
+        <div class="card-title">🤖 Perfil ML</div>
+        {% if usuario.perfil_completo %}
+          <span class="badge badge-green">Completo</span>
+        {% else %}
+          <span class="badge badge-orange">Incompleto</span>
+        {% endif %}
+      </div>
+      <div class="card-body" style="padding-top:0;">
+        <div class="flex justify-between text-sm mb-4">
+          <span class="text-muted">Edad</span>
+          <span>{{ usuario.edad|default:"—" }}</span>
+        </div>
+        <div class="flex justify-between text-sm mb-4">
+          <span class="text-muted">Nivel educativo</span>
+          <span>{{ usuario.get_nivel_educ_display|default:"—" }}</span>
+        </div>
+        <div class="flex justify-between text-sm">
+          <span class="text-muted">Miembros del hogar</span>
+          <span>{{ usuario.miembros_hogar }}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Acción: cambiar estado -->
+    {% if usuario != request.user %}
+    <div class="card">
+      <div class="card-header mb-4"><div class="card-title">⚙️ Acciones</div></div>
+      <div class="card-body" style="padding-top:0;">
+        <form method="post" action="{% url 'panel_admin:user_toggle' usuario.pk %}"
+              onsubmit="return confirm('¿Confirmar cambio de estado?')">
+          {% csrf_token %}
+          <button type="submit"
+                  class="btn btn-sm {% if usuario.is_active %}btn-danger{% else %}btn-success{% endif %} btn-full">
+            {% if usuario.is_active %}🚫 Desactivar cuenta{% else %}✅ Activar cuenta{% endif %}
+          </button>
+        </form>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+</div>
+{% endblock %}

@@ -1,0 +1,180 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{% block title %}SmartSave{% endblock %} — Plataforma Financiera Inteligente</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<link rel="stylesheet" href="{% static 'css/sigamos.css' %}?v=3">
+{% block extra_css %}{% endblock %}
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ===== SIDEBAR ===== -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-wrap">
+        <div class="logo-icon">S</div>
+        <div class="logo-name">Smart<span>Save</span></div>
+      </div>
+    </div>
+
+    <nav class="sidebar-nav">
+
+      <!-- Principal -->
+      <div class="nav-section">
+        <div class="nav-section-label">Principal</div>
+        {% url 'financiero:dashboard' as url_dash %}
+        <a href="{{ url_dash }}" class="nav-item {% if request.path == url_dash %}active{% endif %}">
+          <span class="nav-icon">📊</span> Dashboard
+        </a>
+      </div>
+
+      <!-- Finanzas -->
+      <div class="nav-section">
+        <div class="nav-section-label">Finanzas</div>
+        {% url 'financiero:registro_list' as url_registros %}
+        <a href="{{ url_registros }}" class="nav-item {% if '/registros' in request.path %}active{% endif %}">
+          <span class="nav-icon">📋</span> Mis Registros
+        </a>
+        {% url 'financiero:analisis' as url_analisis %}
+        <a href="{{ url_analisis }}" class="nav-item {% if '/analisis' in request.path %}active{% endif %}">
+          <span class="nav-icon">📈</span> Análisis de Gastos
+        </a>
+      </div>
+
+      <!-- Inteligencia -->
+      <div class="nav-section">
+        <div class="nav-section-label">Inteligencia</div>
+        {% url 'recomendaciones:ml_insights' as url_ml %}
+        <a href="{{ url_ml }}" class="nav-item {% if '/recomendaciones' in request.path and 'metas' not in request.path %}active{% endif %}">
+          <span class="nav-icon">🤖</span> ML Insights
+        </a>
+        {% url 'recomendaciones:metas' as url_metas %}
+        <a href="{{ url_metas }}" class="nav-item {% if 'metas' in request.path %}active{% endif %}">
+          <span class="nav-icon">🎯</span> Metas de Ahorro
+        </a>
+        {% url 'gamificacion:progreso' as url_progreso %}
+        <a href="{{ url_progreso }}" class="nav-item {% if '/progreso' in request.path %}active{% endif %}">
+          <span class="nav-icon">📉</span> Progreso
+        </a>
+      </div>
+
+      <!-- Personal -->
+      <div class="nav-section">
+        <div class="nav-section-label">Personal</div>
+        {% url 'gamificacion:logros' as url_logros %}
+        <a href="{{ url_logros }}" class="nav-item {% if '/logros' in request.path %}active{% endif %}">
+          <span class="nav-icon">🏆</span> Logros
+        </a>
+        {% url 'accounts:profile' as url_profile %}
+        <a href="{{ url_profile }}" class="nav-item {% if '/auth/perfil' in request.path %}active{% endif %}">
+          <span class="nav-icon">👤</span> Perfil
+        </a>
+      </div>
+
+      <!-- Admin (solo staff) -->
+      {% if user.is_staff %}
+      <div class="nav-section">
+        <div class="nav-section-label">⚡ Administración</div>
+        {% url 'panel_admin:user_list' as url_admin_users %}
+        <a href="{{ url_admin_users }}" class="nav-item {% if '/usuarios' in request.path %}active{% endif %}">
+          <span class="nav-icon">👥</span> Usuarios
+        </a>
+        {% url 'panel_admin:activity' as url_admin_act %}
+        <a href="{{ url_admin_act }}" class="nav-item {% if '/actividad' in request.path %}active{% endif %}">
+          <span class="nav-icon">📋</span> Actividad
+        </a>
+        {% url 'panel_admin:metrics' as url_admin_met %}
+        <a href="{{ url_admin_met }}" class="nav-item {% if '/metricas' in request.path %}active{% endif %}">
+          <span class="nav-icon">⚙️</span> Métricas
+        </a>
+      </div>
+      {% endif %}
+
+    </nav><!-- end nav -->
+
+    <!-- Usuario en footer del sidebar -->
+    <div class="sidebar-footer">
+      <a href="{% url 'accounts:profile' %}" class="user-card">
+        <div class="user-avatar">{{ user.nickname|default:user.email|first|upper }}</div>
+        <div class="user-info">
+          <div class="user-name">{{ user.nickname|default:user.email }}</div>
+          <div class="user-role {% if user.is_staff %}admin{% endif %}">
+            {% if user.is_staff %}Administrador{% else %}Usuario{% endif %}
+          </div>
+        </div>
+      </a>
+    </div>
+  </aside><!-- end .sidebar -->
+
+  <!-- Overlay para cerrar el sidebar en móvil -->
+  <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar()"></div>
+
+  <!-- ===== MAIN ===== -->
+  <div class="main">
+
+    <!-- Topbar -->
+    <header class="topbar">
+      <button class="menu-toggle" id="menuToggle" onclick="toggleSidebar()" aria-label="Menú">☰</button>
+      <div class="topbar-title">{% block page_title %}SmartSave{% endblock %}</div>
+      <div class="topbar-actions">
+        {% with dias=user.racha.dias_consecutivos|default:0 %}
+          {% if dias > 0 %}
+            <span class="streak-badge" title="Racha activa">🔥 {{ dias }} días</span>
+          {% endif %}
+        {% endwith %}
+        <a href="{% url 'accounts:profile' %}" class="icon-btn" title="Configuración">⚙️</a>
+        <form method="post" action="{% url 'accounts:logout' %}" style="display:inline;">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-sm btn-outline">Salir</button>
+        </form>
+      </div>
+    </header>
+
+    <!-- Content -->
+    <div class="content">
+
+      <!-- Mensajes Django -->
+      {% if messages %}
+        {% for message in messages %}
+          <div class="msg-alert msg-{{ message.tags }}">
+            {% if message.tags == 'success' %}✅{% elif message.tags == 'error' %}❌{% elif message.tags == 'warning' %}⚠️{% else %}ℹ️{% endif %}
+            {{ message }}
+          </div>
+        {% endfor %}
+      {% endif %}
+
+      {% block content %}{% endblock %}
+    </div>
+
+  </div><!-- end .main -->
+
+</div><!-- end .app -->
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+function toggleSidebar() {
+  document.querySelector('.sidebar').classList.toggle('open');
+  document.getElementById('sidebarOverlay').classList.toggle('show');
+}
+// Cerrar el sidebar al navegar (clic en un enlace) en móvil
+document.addEventListener('DOMContentLoaded', function () {
+  document.querySelectorAll('.sidebar .nav-item').forEach(function (a) {
+    a.addEventListener('click', function () {
+      if (window.innerWidth <= 768) toggleSidebar();
+    });
+  });
+});
+</script>
+
+<script src="{% static 'js/sigamos.js' %}"></script>
+{% block extra_js %}{% endblock %}
+
+</body>
+</html>

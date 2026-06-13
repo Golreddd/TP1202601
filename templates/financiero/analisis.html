@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% block title %}Análisis de Gastos{% endblock %}
+{% block page_title %}Análisis de Gastos{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <div class="page-title">Análisis de Gastos</div>
+    <div class="page-sub">Patrones y tendencias de tu gasto mensual</div>
+  </div>
+  <div class="flex gap-3">
+    <a href="?meses=6"  class="btn btn-sm {% if n_meses == 6 %}btn-primary{% else %}btn-outline{% endif %}">6 meses</a>
+    <a href="?meses=12" class="btn btn-sm {% if n_meses == 12 %}btn-primary{% else %}btn-outline{% endif %}">12 meses</a>
+  </div>
+</div>
+
+{% if tiene_datos %}
+
+<!-- Gráficos superiores -->
+<div class="grid-2 mb-6">
+  <div class="card">
+    <div class="card-header"><div class="card-title">Distribución por Categoría</div></div>
+    <div class="card-body"><div class="chart-container"><canvas id="catPieChart"></canvas></div></div>
+  </div>
+  <div class="card">
+    <div class="card-header"><div class="card-title">Tendencia Mensual de Gastos</div></div>
+    <div class="card-body"><div class="chart-container"><canvas id="trendChart"></canvas></div></div>
+  </div>
+</div>
+
+<!-- Ingresos vs Gastos vs Ahorro -->
+<div class="card mb-6">
+  <div class="card-header"><div class="card-title">Ingresos · Gastos · Ahorro</div></div>
+  <div class="card-body"><div class="chart-container tall"><canvas id="ivaChart"></canvas></div></div>
+</div>
+
+<!-- Tabla de registros -->
+<div class="card">
+  <div class="card-header mb-4"><div class="card-title">Detalle por Período</div></div>
+  <div class="card-body" style="padding-top:0;">
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Período</th>
+            <th>Ingresos</th>
+            <th>Gastos</th>
+            <th>Ahorro</th>
+            <th>Tasa</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in registros %}
+          <tr>
+            <td class="font-semi">{{ r.periodo|date:"M Y"|capfirst }}</td>
+            <td class="text-success">S/ {{ r.ing_total|floatformat:0 }}</td>
+            <td class="text-danger">S/ {{ r.gasto_total|floatformat:0 }}</td>
+            <td class="{% if r.ahorro_bruto >= 0 %}text-success{% else %}text-danger{% endif %}">
+              S/ {{ r.ahorro_bruto|floatformat:0 }}
+            </td>
+            <td>
+              <span class="badge {% if r.tasa_ahorro >= 20 %}badge-green{% elif r.tasa_ahorro >= 10 %}badge-orange{% else %}badge-red{% endif %}">
+                {{ r.tasa_ahorro }}%
+              </span>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+{% else %}
+<div class="card">
+  <div class="empty-state">
+    <div class="empty-icon">📈</div>
+    <h3>Sin datos suficientes</h3>
+    <p style="margin-bottom:16px;">Crea al menos un registro mensual para ver tu análisis.</p>
+    <a href="{% url 'financiero:registro_create' %}" class="btn btn-primary" style="width:auto;display:inline-flex;">
+      + Crear primer registro
+    </a>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const mesesLabels  = {{ meses_labels|safe }};
+const gastosData   = {{ gastos_data|safe }};
+const ingresosData = {{ ingresos_data|safe }};
+const ahorroData   = {{ ahorro_data|safe }};
+const catLabels    = {{ cat_labels|safe }};
+const catData      = {{ cat_data|safe }};
+
+document.addEventListener('DOMContentLoaded', () => {
+  if (catData.length)    mkDoughnut('catPieChart', catLabels, catData);
+  if (gastosData.length) mkLine('trendChart', mesesLabels, gastosData, 'Gastos');
+
+  // Ingresos vs Gastos vs Ahorro (multi-line)
+  const ctx = document.getElementById('ivaChart');
+  if (ctx && mesesLabels.length) {
+    new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: mesesLabels,
+        datasets: [
+          { label: 'Ingresos', data: ingresosData, backgroundColor: 'rgba(16,185,129,.75)', borderRadius: 6, borderSkipped: false },
+          { label: 'Gastos',   data: gastosData,   backgroundColor: 'rgba(59,130,246,.75)', borderRadius: 6, borderSkipped: false },
+          { label: 'Ahorro',   data: ahorroData,   backgroundColor: 'rgba(245,158,11,.75)', borderRadius: 6, borderSkipped: false },
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { labels: { font: { family: 'Segoe UI', size: 12 }, color: '#64748b', boxWidth: 12 }}},
+        scales: {
+          x: { grid: { display: false }, ticks: { color: '#94a3b8' }},
+          y: { grid: { color: 'rgba(0,0,0,.04)' }, ticks: { color: '#94a3b8', callback: v => 'S/ ' + v.toLocaleString('es-PE') }}
+        }
+      }
+    });
+  }
+});
+</script>
+{% endblock %}

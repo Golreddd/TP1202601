@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Admin — Actividad{% endblock %}
+{% block page_title %}Actividad de la Plataforma{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <div class="page-title">📋 Actividad de la Plataforma</div>
+    <div class="page-sub">Registro de auditoría de acciones administrativas</div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-body" style="padding:0;">
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Fecha</th>
+            <th>Administrador</th>
+            <th>Acción</th>
+            <th>Usuario Objetivo</th>
+            <th>IP</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for log in logs %}
+          <tr>
+            <td class="text-muted text-xs">{{ log.fecha|date:"d/m/Y H:i" }}</td>
+            <td class="font-semi">{% if log.admin %}{{ log.admin.nickname|default:log.admin.email }}{% else %}Sistema{% endif %}</td>
+            <td>
+              <span class="badge
+                {% if 'ACTIVAR' in log.accion %}badge-green
+                {% elif 'DESACTIVAR' in log.accion %}badge-red
+                {% elif 'VER' in log.accion %}badge-blue
+                {% else %}badge-gray{% endif %}">
+                {{ log.accion }}
+              </span>
+            </td>
+            <td>{% if log.usuario_objetivo %}{{ log.usuario_objetivo.nickname|default:log.usuario_objetivo.email }}{% else %}—{% endif %}</td>
+            <td class="text-muted text-xs">{{ log.ip_address|default:"—" }}</td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="5" style="text-align:center;padding:32px;color:var(--text2);">Sin actividad registrada.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

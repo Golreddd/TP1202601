@@ -1,0 +1,41 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{% block title %}Acceso{% endblock %} — SmartSave</title>
+<link rel="stylesheet" href="{% static 'css/sigamos.css' %}?v=3">
+{% block extra_css %}{% endblock %}
+</head>
+<body>
+
+<div class="auth-page">
+  <div class="auth-card">
+
+    <!-- Logo -->
+    <div class="auth-logo">
+      <div class="logo-icon">S</div>
+      <div class="logo-text">Smart<span>Save</span></div>
+    </div>
+
+    <!-- Mensajes Django -->
+    {% if messages %}
+      {% for message in messages %}
+        <div class="msg-alert msg-{{ message.tags }}" style="margin-bottom:16px;">
+          {{ message }}
+        </div>
+      {% endfor %}
+    {% endif %}
+
+    {% block content %}{% endblock %}
+
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<script src="{% static 'js/sigamos.js' %}"></script>
+{% block extra_js %}{% endblock %}
+
+</body>
+</html>

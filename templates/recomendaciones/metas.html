@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Metas de Ahorro{% endblock %}
+{% block page_title %}Metas de Ahorro{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <div class="page-title">Metas de Ahorro</div>
+    <div class="page-sub">Crea y monitorea tus objetivos financieros</div>
+  </div>
+  <a href="{% url 'recomendaciones:meta_create' %}" class="btn btn-primary btn-sm">+ Nueva Meta</a>
+</div>
+
+{% if metas %}
+<div class="grid-3">
+  {% for meta in metas %}
+  <div class="goal-card">
+    <div class="goal-icon" style="background:rgba(59,130,246,.1);">{{ meta.icono }}</div>
+    <div class="goal-name">{{ meta.nombre }}</div>
+    <div class="goal-amounts">
+      <span>S/ {{ meta.monto_actual|floatformat:0 }} ahorrado</span>
+      <span class="font-bold">S/ {{ meta.monto_objetivo|floatformat:0 }}</span>
+    </div>
+    <div class="goal-pct">{{ meta.porcentaje }}%</div>
+    <div class="progress-bar">
+      <div class="progress-fill {% if meta.porcentaje >= 80 %}green{% elif meta.porcentaje >= 40 %}blue{% else %}orange{% endif %}"
+           style="width:{{ meta.porcentaje }}%"></div>
+    </div>
+    {% if meta.fecha_limite %}
+      <div class="goal-deadline">📅 Meta: {{ meta.fecha_limite|date:"d M Y" }}</div>
+    {% endif %}
+    {% if meta.completada %}
+      <div class="badge badge-green" style="margin-top:10px;">✓ Completada</div>
+    {% endif %}
+    <div class="flex gap-2 mt-4">
+      <a href="{% url 'recomendaciones:meta_update' meta.pk %}" class="btn btn-sm btn-outline" style="flex:1;justify-content:center;">✏️ Editar</a>
+      <a href="{% url 'recomendaciones:meta_delete' meta.pk %}" class="btn btn-sm btn-danger" style="flex:1;justify-content:center;">🗑️</a>
+    </div>
+  </div>
+  {% endfor %}
+
+  <!-- Tarjeta "Nueva meta" -->
+  <a href="{% url 'recomendaciones:meta_create' %}" class="goal-card"
+     style="border:2px dashed var(--border);display:flex;align-items:center;justify-content:center;flex-direction:column;cursor:pointer;min-height:200px;text-decoration:none;color:var(--text2);">
+    <div style="font-size:36px;margin-bottom:10px;">+</div>
+    <div class="font-semi">Nueva Meta de Ahorro</div>
+  </a>
+</div>
+
+{% else %}
+<div class="card">
+  <div class="empty-state">
+    <div class="empty-icon">🎯</div>
+    <h3>Sin metas activas</h3>
+    <p style="margin-bottom:16px;">Define tus objetivos financieros y lleva un seguimiento de tu progreso.</p>
+    <a href="{% url 'recomendaciones:meta_create' %}" class="btn btn-primary" style="width:auto;display:inline-flex;">
+      + Crear primera meta
+    </a>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

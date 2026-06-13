@@ -1,0 +1,251 @@
+{% comment %}
+JS reutilizable para renderizar el resultado ML (diagnóstico, banners de
+planes, badges, alternativas y gráficos SHAP) + elegir plan.
+Requiere la variable de contexto ml_js (string JSON). Debe incluirse
+dentro de un <script> y después de que sigamos.js (chartDefaults,
+showToast, csrfToken) esté cargado. Usado por ml_insights.html y
+historial_detalle.html.
+{% endcomment %}
+{% if ml_js %}
+const _ml = {{ ml_js|safe }};
+const mlData    = { ahorro: _ml.ahorro, meta: _ml.meta, ingTotal: _ml.ingTotal, gastoTotal: _ml.gastoTotal };
+const planesData = _ml.planes || [];
+const shapData   = _ml.shap   || [];
+
+document.addEventListener('DOMContentLoaded', function() {
+  renderDiagBanner();
+  renderPlanesBanner();
+  renderPlanBadges();
+  renderAlternativas();
+  if (shapData.length) renderShapCharts();
+});
+
+// ── Corrección 3: Diagnóstico financiero ──────────────────────────────────────
+function renderDiagBanner() {
+  const el = document.getElementById('diagBanner');
+  if (!el) return;
+  const { ahorro, meta, ingTotal, gastoTotal } = mlData;
+  let style, icono, titulo, detalle;
+  if (gastoTotal > ingTotal * 1.10) {
+    style  = 'background:rgba(239,68,68,.1);border:1.5px solid rgba(239,68,68,.4);';
+    icono  = '🔴';
+    titulo = '<strong style="color:#dc2626;">Situación Crítica</strong>';
+    detalle = '<span style="color:#7f1d1d;"> · Tus gastos superan tus ingresos en más del 10%</span>';
+  } else if (gastoTotal > ingTotal) {
+    style  = 'background:rgba(245,158,11,.1);border:1.5px solid rgba(245,158,11,.4);';
+    icono  = '🟡';
+    titulo = '<strong style="color:#92400e;">Déficit Financiero</strong>';
+    detalle = '<span style="color:#78350f;"> · Gastas más de lo que ganas</span>';
+  } else if (meta > 0 && ahorro < meta * 0.5) {
+    style  = 'background:rgba(245,158,11,.1);border:1.5px solid rgba(245,158,11,.4);';
+    icono  = '🟡';
+    titulo = '<strong style="color:#92400e;">Ahorro Insuficiente</strong>';
+    detalle = '<span style="color:#78350f;"> · Tu ahorro cubre menos de la mitad de tu meta</span>';
+  } else if (meta > 0 && ahorro < meta) {
+    style  = 'background:rgba(59,130,246,.08);border:1.5px solid rgba(59,130,246,.3);';
+    icono  = '🔵';
+    titulo = '<strong style="color:#1e40af;">Cerca de tu Meta</strong>';
+    detalle = '<span style="color:#1e3a8a;"> · Pequeños ajustes serán suficientes</span>';
+  } else {
+    style  = 'background:rgba(16,185,129,.1);border:1.5px solid rgba(16,185,129,.35);';
+    icono  = '🟢';
+    titulo = '<strong style="color:#065f46;">¡Ya alcanzas tu meta!</strong>';
+    detalle = '<span style="color:#064e3b;"> · Mantén tus hábitos actuales</span>';
+  }
+  el.innerHTML = `<div style="${style}border-radius:var(--radius-sm);padding:14px 18px;display:flex;align-items:center;gap:10px;font-size:14px;">
+    <span style="font-size:18px;">${icono}</span><div>${titulo}${detalle}</div>
+  </div>`;
+}
+
+// ── Corrección 2: Banner estado de planes ─────────────────────────────────────
+function renderPlanesBanner() {
+  const el = document.getElementById('planesBanner');
+  if (!el) return;
+  const { meta } = mlData;
+  const planNames = ['conservador', 'balanceado', 'agresivo'];
+  const principales = planesData.filter(p => planNames.includes((p.nombre || '').toLowerCase()));
+  if (!principales.length) return;
+  const cumplen = principales.filter(p => (p.ahorro_predicho || 0) >= meta);
+  let style, texto;
+  if (cumplen.length >= principales.length) {
+    style = 'background:rgba(16,185,129,.1);border:1.5px solid rgba(16,185,129,.35);color:#065f46;';
+    texto = '✅ <strong>Los 3 planes alcanzan tu meta.</strong> Elige el más cómodo para ti.';
+  } else if (cumplen.length === 1 && (cumplen[0].nombre || '').toLowerCase() === 'agresivo') {
+    style = 'background:rgba(245,158,11,.1);border:1.5px solid rgba(245,158,11,.35);color:#92400e;';
+    texto = '⚡ <strong>Solo el Plan Agresivo alcanza tu meta.</strong> Evalúa si es sostenible.';
+  } else if (cumplen.length === 0) {
+    style = 'background:rgba(239,68,68,.08);border:1.5px solid rgba(239,68,68,.3);color:#dc2626;';
+    texto = '❌ <strong>Ningún plan alcanza tu meta.</strong> Considera reducirla o aumentar ingresos.';
+  } else {
+    return;
+  }
+  el.innerHTML = `<div style="${style}border-radius:var(--radius-sm);padding:12px 16px;font-size:13px;">${texto}</div>`;
+}
+
+// ── Corrección 2: Badges por tarjeta ─────────────────────────────────────────
+function renderPlanBadges() {
+  const { meta } = mlData;
+  planesData.forEach((plan, i) => {
+    const card = document.getElementById('plan-card-' + i);
+    if (!card) return;
+    const statusDiv = card.querySelector('.plan-meta-status');
+    if (!statusDiv) return;
+    const ahorro = plan.ahorro_predicho || 0;
+    if (ahorro >= meta) {
+      statusDiv.innerHTML = '<span style="color:#059669;font-weight:700;">✅ Meta alcanzada</span>';
+    } else {
+      const falta = Math.ceil(meta - ahorro);
+      statusDiv.innerHTML = `<span style="color:#dc2626;font-weight:700;">❌ Faltan S/ ${falta.toLocaleString('es-PE')}</span>`;
+    }
+  });
+}
+
+// ── Alternativas para tu situación ────────────────────────────────────────────
+function renderAlternativas() {
+  const el = document.getElementById('alternativasSec');
+  if (!el) return;
+
+  const planNames = ['conservador', 'balanceado', 'agresivo'];
+  const principales = planesData.filter(p => planNames.includes((p.nombre || '').toLowerCase()));
+  const cumplen = principales.filter(p => (p.ahorro_predicho || 0) >= mlData.meta);
+
+  // Solo mostrar si 0 o 1 planes cumplen la meta
+  if (cumplen.length >= 2) return;
+
+  const ingreso_adicional = Math.ceil(mlData.meta - mlData.ahorro);
+
+  const planConservador = principales.find(p => (p.nombre || '').toLowerCase() === 'conservador');
+  const ahorro_conservador = planConservador ? (planConservador.ahorro_predicho || 0) : 0;
+
+  let tarjetaDerecha;
+  if (ahorro_conservador > 0) {
+    const s = Math.round(ahorro_conservador);
+    tarjetaDerecha = `
+      <div class="card-title mb-2" style="font-size:15px;">🎯 Meta alternativa</div>
+      <p style="font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:10px;">
+        Con el Plan Conservador (sin tocar gastos esenciales) alcanzarías
+        <strong style="color:var(--accent-dark);">S/ ${s.toLocaleString('es-PE')}/mes</strong>.
+        Considera si esta es una meta más realista como primer paso.
+      </p>`;
+  } else {
+    const meta_inicial = Math.ceil(mlData.ingTotal * 0.05);
+    tarjetaDerecha = `
+      <div class="card-title mb-2" style="font-size:15px;">🎯 Meta escalonada</div>
+      <p style="font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:10px;">
+        Comienza con <strong style="color:var(--accent-dark);">S/ ${meta_inicial.toLocaleString('es-PE')}/mes</strong>
+        (5% de tus ingresos) e increméntala gradualmente conforme reduces tus gastos.
+      </p>`;
+  }
+
+  el.innerHTML = `
+    <div class="card">
+      <div class="card-header mb-4">
+        <div class="card-title">💡 Alternativas para tu situación</div>
+        <div class="text-sm text-muted" style="margin-top:4px;">
+          Opciones adicionales cuando los planes de optimización no son suficientes
+        </div>
+      </div>
+      <div class="card-body" style="padding-top:0;">
+        <div class="grid-2">
+          <div style="border:1.5px solid rgba(59,130,246,.3);border-radius:var(--radius);padding:20px;background:rgba(59,130,246,.04);">
+            <div class="card-title mb-2" style="font-size:15px;">💼 Incrementar ingresos</div>
+            <p style="font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:10px;">
+              Con un ingreso adicional de aprox.
+              <strong style="color:var(--primary);">S/ ${ingreso_adicional.toLocaleString('es-PE')}/mes</strong>
+              (trabajo extra, freelance, ventas) podrías alcanzar tu meta sin recortes drásticos en tus gastos actuales.
+            </p>
+          </div>
+          <div style="border:1.5px solid rgba(16,185,129,.3);border-radius:var(--radius);padding:20px;background:rgba(16,185,129,.04);">
+            ${tarjetaDerecha}
+          </div>
+        </div>
+      </div>
+    </div>`;
+}
+
+// ── Corrección 1: Gráficos SHAP separados ─────────────────────────────────────
+function renderShapCharts() {
+  const THRESHOLD = 0.01;
+  const accionables = shapData.filter(x => (x.feature || '').startsWith('GASTO_'));
+  const informativos = shapData.filter(x => !(x.feature || '').startsWith('GASTO_'));
+
+  // Sección A — Gastos accionables (verde si favorece ahorro, rojo si lo reduce)
+  const ctxA = document.getElementById('shapAccionablesChart');
+  if (ctxA && accionables.length) {
+    const labelsA = accionables.map(x => {
+      const nombre = x.feature.replace('GASTO_', '');
+      return Math.abs(x.shap_value) < THRESHOLD ? nombre + ' (sin impacto)' : nombre;
+    });
+    const valsA = accionables.map(x => Math.abs(x.shap_value) < THRESHOLD ? 0 : x.shap_value);
+    const colsA = valsA.map(v => v >= 0 ? 'rgba(16,185,129,.75)' : 'rgba(239,68,68,.75)');
+    new Chart(ctxA, {
+      type: 'bar',
+      data: { labels: labelsA, datasets: [{ label: 'Impacto SHAP', data: valsA, backgroundColor: colsA, borderRadius: 4, borderSkipped: false }] },
+      options: { ...chartDefaults, indexAxis: 'y',
+        scales: {
+          x: { grid: { color: 'rgba(0,0,0,.04)' }, ticks: { color: '#94a3b8' } },
+          y: { grid: { display: false }, ticks: { color: '#64748b', font: { size: 12 } } }
+        }
+      }
+    });
+  }
+
+  // Sección B — Factores informativos (gris, no accionables)
+  const ctxB = document.getElementById('shapInfoChart');
+  if (ctxB && informativos.length) {
+    const labelsB = informativos.map(x => x.feature);
+    const valsB   = informativos.map(x => x.shap_value);
+    const colsB   = valsB.map(() => 'rgba(148,163,184,.55)');
+    new Chart(ctxB, {
+      type: 'bar',
+      data: { labels: labelsB, datasets: [{ label: 'Impacto SHAP (contexto)', data: valsB, backgroundColor: colsB, borderRadius: 4, borderSkipped: false }] },
+      options: { ...chartDefaults, indexAxis: 'y',
+        scales: {
+          x: { grid: { color: 'rgba(0,0,0,.04)' }, ticks: { color: '#94a3b8' } },
+          y: { grid: { display: false }, ticks: { color: '#64748b', font: { size: 12 } } }
+        }
+      }
+    });
+  }
+}
+{% endif %}
+
+// ── Elegir plan de optimización ───────────────────────────────────────────────
+function elegirPlan(nombrePlan, resultadoId, btn) {
+  if (btn && btn.disabled) return;
+  const textoOrig = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Guardando...'; }
+
+  fetch('/api/v1/recomendaciones/elegir-plan/', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+    credentials: 'same-origin',
+    body: JSON.stringify({ resultado_id: resultadoId, nombre_plan: nombrePlan }),
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.id) {
+      showToast('✅ ' + data.mensaje);
+      // Resetear todos los botones, marcar el seleccionado como activo
+      document.querySelectorAll('[id^="btn-elegir-"]').forEach(b => {
+        b.disabled = false;
+        b.textContent = '📌 Elegir este plan';
+        b.style.background = '';
+      });
+      if (btn) {
+        btn.textContent = '✅ Plan activo';
+        btn.disabled = true;
+        btn.style.background = 'rgba(16,185,129,.2)';
+        btn.style.color = '#065f46';
+        btn.style.border = '1.5px solid rgba(16,185,129,.5)';
+      }
+    } else {
+      showToast('❌ ' + (data.error || 'Error al guardar el plan.'));
+      if (btn) { btn.disabled = false; btn.textContent = textoOrig; }
+    }
+  })
+  .catch(() => {
+    showToast('❌ Error de conexión.');
+    if (btn) { btn.disabled = false; btn.textContent = textoOrig; }
+  });
+}

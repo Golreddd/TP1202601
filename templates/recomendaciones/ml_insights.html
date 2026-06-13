@@ -1,0 +1,231 @@
+{% extends "base.html" %}
+{% block title %}ML Insights{% endblock %}
+{% block page_title %}ML Insights{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <div class="page-title">🤖 ML Insights</div>
+    <div class="page-sub">Análisis personalizado de ahorro mediante Machine Learning</div>
+  </div>
+  {% if not user.perfil_completo %}
+    <a href="{% url 'accounts:profile' %}" class="btn btn-sm btn-outline">Completar perfil</a>
+  {% endif %}
+</div>
+
+{% if not user.perfil_completo %}
+  <div class="warning-box mb-6">
+    <span>⚠️</span>
+    <p>Tu perfil financiero está incompleto. Para obtener análisis ML precisos, completa
+       <strong>edad</strong> y <strong>nivel educativo</strong> en tu
+       <a href="{% url 'accounts:profile' %}">perfil</a>.</p>
+  </div>
+{% endif %}
+
+<!-- Panel de ejecución via API -->
+<div class="ml-setup mb-6">
+  <h2>Ejecutar Nuevo Análisis ML</h2>
+  <p>Elige el registro mensual con el que deseas ejecutar el análisis y tu meta de ahorro.</p>
+  <div class="ml-form" style="flex-wrap:wrap;">
+    <div>
+      <label style="display:block;color:#94a3b8;font-size:12px;font-weight:600;margin-bottom:6px;">Registro mensual</label>
+      <select id="registroSel" class="form-input" onchange="renderResumenRegistro()" style="min-width:420px;background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.2);color:#fff;">
+      </select>
+    </div>
+    <div>
+      <label style="display:block;color:#94a3b8;font-size:12px;font-weight:600;margin-bottom:6px;">Meta de ahorro (S/)</label>
+      <input type="number" id="metaAhorro" class="form-input" placeholder="Ej: 500" min="0" step="0.01" style="width:160px;background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.2);color:#fff;">
+    </div>
+    <div style="padding-top:18px;">
+      <button class="btn btn-accent" id="btnML" onclick="ejecutarML()">🚀 Ejecutar Análisis</button>
+    </div>
+  </div>
+
+  <!-- Resumen del registro seleccionado (renderizado por JS) -->
+  <div id="resumenRegistro" style="margin-top:16px;"></div>
+
+  <div id="mlError" style="color:#fca5a5;font-size:13px;margin-top:12px;display:none;"></div>
+</div>
+
+{% if ultimo and detalle %}
+{% include "recomendaciones/_resultado_ml.html" %}
+
+<!-- Historial -->
+{% if resultados|length > 1 %}
+<div class="card">
+  <div class="card-header mb-4">
+    <div class="card-title">📅 Historial de Análisis</div>
+    <div class="text-sm text-muted" style="margin-top:4px;">Haz clic en un análisis para ver sus recomendaciones completas (sin volver a ejecutar el modelo).</div>
+  </div>
+  <div class="card-body" style="padding-top:0;">
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Fecha</th><th>Período</th><th>Cluster</th><th>Ahorro Predicho</th><th>Meta</th><th>Gap</th><th></th></tr></thead>
+        <tbody>
+          {% for r in resultados %}
+          <tr>
+            <td>{{ r.creado_en|date:"d/m/Y" }}</td>
+            <td>{{ r.registro.periodo|date:"F Y"|capfirst }}</td>
+            <td><span class="badge badge-blue">{{ r.cluster_label }}</span></td>
+            <td class="text-success font-bold">S/ {{ r.ahorro_actual|floatformat:0 }}</td>
+            <td>S/ {{ r.meta_validada|floatformat:0 }}</td>
+            <td class="{% if r.alcanza_meta %}text-success{% else %}text-danger{% endif %}">
+              S/ {{ r.gap|floatformat:0 }}
+            </td>
+            <td>
+              <a href="{% url 'recomendaciones:historial_detalle' r.id %}" class="btn btn-sm btn-outline">Ver →</a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% else %}
+<!-- Sin resultados -->
+<div class="card">
+  <div class="empty-state">
+    <div class="empty-icon">🤖</div>
+    <h3>Sin análisis ML aún</h3>
+    <p>Usa el panel de arriba para ejecutar tu primer análisis. Necesitas al menos un registro mensual.</p>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// ── Registros disponibles para el análisis ────────────────────────────────────
+const _registros = {{ registros_js|safe }};
+
+function _fmtSoles(n) {
+  return 'S/ ' + Number(n).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function poblarSelectorRegistros() {
+  const sel = document.getElementById('registroSel');
+  if (!sel) return;
+  if (!_registros.length) {
+    sel.innerHTML = '<option value="">No tienes registros mensuales</option>';
+    sel.disabled = true;
+    return;
+  }
+  sel.innerHTML = _registros.map(r => {
+    const bonif = r.bonif > 0
+      ? `Bonificación: ${_fmtSoles(r.bonif)}`
+      : 'Sin bonificación';
+    const txt = `${r.mes} ${r.anio} — Ingreso: ${_fmtSoles(r.ingTotal)} | Gasto: ${_fmtSoles(r.gastoTotal)} | ${bonif}`;
+    // Texto oscuro sobre fondo blanco para que las opciones del desplegable
+    // sean legibles (el select cerrado usa texto blanco sobre fondo oscuro).
+    return `<option value="${r.id}" style="color:#1e293b;background:#fff;">${txt}</option>`;
+  }).join('');
+  renderResumenRegistro();
+}
+
+function renderResumenRegistro() {
+  const sel = document.getElementById('registroSel');
+  const el  = document.getElementById('resumenRegistro');
+  if (!sel || !el) return;
+  const reg = _registros.find(r => String(r.id) === String(sel.value));
+  if (!reg) { el.innerHTML = ''; return; }
+
+  const filasGastos = Object.entries(reg.gastos).map(([cat, val]) =>
+    `<div style="display:flex;justify-content:space-between;font-size:12px;color:#cbd5e1;padding:2px 0;">
+       <span>${cat}</span><span>${_fmtSoles(val)}</span>
+     </div>`
+  ).join('');
+
+  const bonifRow = reg.bonif > 0
+    ? `<div style="display:flex;justify-content:space-between;font-size:13px;color:#e2e8f0;padding:3px 0;">
+         <span>🎁 Bonificación</span><span style="color:#34d399;font-weight:700;">${_fmtSoles(reg.bonif)}</span>
+       </div>`
+    : '';
+
+  const ahorroColor = reg.ahorroBruto >= 0 ? '#34d399' : '#fca5a5';
+
+  el.innerHTML = `
+    <div style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:16px 18px;">
+      <div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:12px;">📄 Resumen de ${reg.mes} ${reg.anio}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;">
+        <div>
+          <div style="font-size:11px;color:#94a3b8;font-weight:600;text-transform:uppercase;margin-bottom:6px;">Ingresos</div>
+          <div style="display:flex;justify-content:space-between;font-size:13px;color:#e2e8f0;padding:3px 0;">
+            <span>Ingreso formal (planilla)</span><span>${_fmtSoles(reg.ingPlanilla)}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:13px;color:#e2e8f0;padding:3px 0;">
+            <span>Ingreso informal</span><span>${_fmtSoles(reg.ingInformal)}</span>
+          </div>
+          ${bonifRow}
+        </div>
+        <div>
+          <div style="font-size:11px;color:#94a3b8;font-weight:600;text-transform:uppercase;margin-bottom:6px;">Gastos por categoría</div>
+          ${filasGastos}
+        </div>
+      </div>
+      <div style="border-top:1px solid rgba(255,255,255,.12);margin-top:12px;padding-top:10px;display:flex;justify-content:space-between;font-size:14px;">
+        <span style="color:#cbd5e1;font-weight:600;">Ahorro bruto del mes</span>
+        <span style="color:${ahorroColor};font-weight:800;">${_fmtSoles(reg.ahorroBruto)}</span>
+      </div>
+    </div>`;
+}
+
+document.addEventListener('DOMContentLoaded', poblarSelectorRegistros);
+
+{% include "recomendaciones/_resultado_ml_js.html" %}
+
+function ejecutarML() {
+  const meta = parseFloat(document.getElementById('metaAhorro').value);
+  const errEl = document.getElementById('mlError');
+  const btn = document.getElementById('btnML');
+  const sel = document.getElementById('registroSel');
+  errEl.style.display = 'none';
+
+  if (!meta || meta <= 0) {
+    errEl.textContent = '⚠️ Ingresa una meta de ahorro válida (mayor a 0).';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  const registroId = sel ? parseInt(sel.value, 10) : null;
+  if (!registroId) {
+    errEl.textContent = '⚠️ Selecciona un registro mensual para el análisis.';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  btn.textContent = '⏳ Analizando...';
+  btn.disabled = true;
+
+  fetch('/api/v1/recomendaciones/ejecutar/', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRFToken': csrfToken,
+    },
+    credentials: 'same-origin',
+    body: JSON.stringify({ meta_ahorro: meta, registro_id: registroId }),
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.id || data.ahorro_actual !== undefined) {
+      showToast('✅ Análisis ML completado. Recargando...');
+      setTimeout(() => location.reload(), 1200);
+    } else {
+      errEl.textContent = data.error || data.detail || 'Error al ejecutar el análisis.';
+      errEl.style.display = 'block';
+    }
+  })
+  .catch(() => {
+    errEl.textContent = 'Error de conexión. Verifica tu sesión.';
+    errEl.style.display = 'block';
+  })
+  .finally(() => {
+    btn.textContent = '🚀 Ejecutar Análisis';
+    btn.disabled = false;
+  });
+}
+</script>
+{% endblock %}

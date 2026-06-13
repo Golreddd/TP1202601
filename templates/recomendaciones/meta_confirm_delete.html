@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Eliminar Meta{% endblock %}
+{% block page_title %}Eliminar Meta{% endblock %}
+
+{% block content %}
+<div style="max-width:480px;margin:0 auto;">
+  <div class="card" style="padding:40px;text-align:center;">
+    <div style="font-size:48px;margin-bottom:16px;">{{ meta.icono }}</div>
+    <div class="page-title" style="margin-bottom:8px;">¿Eliminar esta meta?</div>
+    <div class="page-sub" style="margin-bottom:24px;">
+      La meta <strong>"{{ meta.nombre }}"</strong> se ocultará de tu lista.
+      Podrás recuperarla contactando al soporte.
+    </div>
+    <div class="info-box" style="text-align:left;margin-bottom:24px;">
+      Progreso actual: <strong>{{ meta.porcentaje }}%</strong>
+      (S/ {{ meta.monto_actual|floatformat:0 }} de S/ {{ meta.monto_objetivo|floatformat:0 }})
+    </div>
+    <form method="post" style="display:inline;">
+      {% csrf_token %}
+      <div class="flex gap-3 justify-end">
+        <a href="{% url 'recomendaciones:metas' %}" class="btn btn-outline">Cancelar</a>
+        <button type="submit" class="btn btn-danger" style="width:auto;">Sí, eliminar</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

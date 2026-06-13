@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}Admin — Usuarios{% endblock %}
+{% block page_title %}Gestión de Usuarios{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <div class="page-title">👥 Gestión de Usuarios</div>
+    <div class="page-sub">Panel administrativo — Control de usuarios del sistema</div>
+  </div>
+</div>
+
+<!-- Banner admin -->
+<div class="admin-banner mb-6">
+  <div class="admin-icon">🔐</div>
+  <div>
+    <h2>Panel de Administración</h2>
+    <p>Tienes acceso completo como administrador del sistema SmartSave.</p>
+  </div>
+</div>
+
+<!-- Filtros -->
+<form method="get" class="filter-bar mb-6">
+  <input type="text" name="search" class="form-input" placeholder="Buscar por nombre o correo…"
+         value="{{ search }}" style="width:260px;">
+  <select name="activo" class="form-input" style="width:160px;" onchange="this.form.submit()">
+    <option value="">Todos</option>
+    <option value="true"  {% if request.GET.activo == 'true' %}selected{% endif %}>Activos</option>
+    <option value="false" {% if request.GET.activo == 'false' %}selected{% endif %}>Inactivos</option>
+  </select>
+  <button type="submit" class="btn btn-primary btn-sm">Buscar</button>
+  {% if search or request.GET.activo %}
+    <a href="{% url 'panel_admin:user_list' %}" class="btn btn-sm btn-outline">Limpiar</a>
+  {% endif %}
+</form>
+
+<div class="card">
+  <div class="card-body" style="padding:0;">
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Nickname</th>
+            <th>Correo</th>
+            <th>Rol</th>
+            <th>Estado</th>
+            <th>Registro</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for u in usuarios %}
+          <tr>
+            <td class="text-muted">{{ u.pk }}</td>
+            <td class="font-semi">{{ u.nickname|default:"—" }}</td>
+            <td>{{ u.email }}</td>
+            <td>
+              <span class="badge {% if u.is_staff %}badge-purple{% else %}badge-blue{% endif %}">
+                {{ u.nombre_rol }}
+              </span>
+            </td>
+            <td>
+              <span class="badge {% if u.is_active %}badge-green{% else %}badge-red{% endif %}">
+                {% if u.is_active %}Activo{% else %}Inactivo{% endif %}
+              </span>
+            </td>
+            <td class="text-muted">{{ u.date_joined|date:"d/m/Y" }}</td>
+            <td>
+              <a href="{% url 'panel_admin:user_detail' u.pk %}" class="btn btn-sm btn-outline">👁️ Ver</a>
+              {% if u != request.user %}
+                <form method="post" action="{% url 'panel_admin:user_toggle' u.pk %}"
+                      style="display:inline;" onsubmit="return confirm('¿Confirmar cambio de estado?')">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-sm {% if u.is_active %}btn-danger{% else %}btn-success{% endif %}" style="margin-left:4px;">
+                    {% if u.is_active %}Desactivar{% else %}Activar{% endif %}
+                  </button>
+                </form>
+              {% endif %}
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="7" style="text-align:center;padding:32px;color:var(--text2);">
+              No se encontraron usuarios.
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

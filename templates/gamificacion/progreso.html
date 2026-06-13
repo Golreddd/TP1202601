@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+{% block title %}Progreso Financiero{% endblock %}
+{% block page_title %}Progreso Financiero{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <div class="page-title">Progreso Financiero</div>
+    <div class="page-sub">Tu evolución hacia la salud financiera</div>
+  </div>
+  <a href="{% url 'financiero:analisis' %}?meses=12" class="btn btn-sm btn-outline">Ver análisis detallado</a>
+</div>
+
+{% if plan_activo %}
+<div class="card mb-6">
+  <div class="card-header mb-4">
+    <div class="card-title">{{ plan_activo.icono }} Mi Plan Activo — {{ plan_activo.nombre_plan }}</div>
+    <div class="text-sm text-muted" style="margin-top:4px;">
+      Adoptado el {{ plan_activo.fecha_seleccion|date:"d/m/Y" }} ·
+      Meta: <strong>S/ {{ plan_activo.meta_ahorro|floatformat:0 }}</strong> ·
+      Ahorro proyectado: <strong>S/ {{ plan_activo.ahorro_proyectado|floatformat:0 }}</strong>
+    </div>
+  </div>
+  <div class="card-body" style="padding-top:0;">
+    {% if comparacion_plan %}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Mes</th><th>Ahorro real</th><th>Objetivo plan</th><th>Diferencia</th><th>Cumplimiento</th></tr>
+        </thead>
+        <tbody>
+          {% for c in comparacion_plan %}
+          <tr>
+            <td>{{ c.registro.periodo|date:"M Y" }}</td>
+            <td class="{% if c.ahorro_real >= 0 %}text-success{% else %}text-danger{% endif %} font-bold">
+              S/ {{ c.ahorro_real|floatformat:0 }}
+            </td>
+            <td>S/ {{ c.ahorro_objetivo|floatformat:0 }}</td>
+            <td class="{% if c.diff >= 0 %}text-success{% else %}text-danger{% endif %}">
+              {% if c.diff >= 0 %}+{% endif %}S/ {{ c.diff|floatformat:0 }}
+            </td>
+            <td>
+              {% if c.cumple %}
+                <span style="background:rgba(16,185,129,.15);color:#065f46;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:600;">✅ Cumple</span>
+              {% else %}
+                <span style="background:rgba(239,68,68,.1);color:#dc2626;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:600;">❌ No cumple</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="info-box mt-4" style="font-size:13px;">
+      ℹ️ Se considera ✅ cuando el ahorro real ≥ 90% del proyectado por el plan.
+      <a href="{% url 'recomendaciones:ml_insights' %}" style="color:var(--primary);font-weight:600;margin-left:8px;">
+        Actualizar análisis →
+      </a>
+    </div>
+    {% else %}
+    <div style="text-align:center;padding:20px 0;">
+      <div style="font-size:32px;margin-bottom:8px;">📅</div>
+      <p style="color:var(--text2);font-size:13px;">
+        Aún no hay registros mensuales desde que adoptaste este plan.<br>
+        Crea tu próximo registro para ver el seguimiento.
+      </p>
+      <a href="{% url 'financiero:registro_create' %}" class="btn btn-sm btn-accent mt-3" style="display:inline-flex;">
+        + Agregar registro del mes
+      </a>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+{% if registros %}
+
+<div class="stats-grid mb-6">
+  <div class="stat-card green">
+    <div class="stat-icon">📈</div>
+    <div class="stat-label">Mejor Tasa de Ahorro</div>
+    <div class="stat-value">{{ mejor_tasa }}%</div>
+    <div class="stat-change up">▲ Máximo registrado</div>
+  </div>
+  <div class="stat-card blue">
+    <div class="stat-icon">📋</div>
+    <div class="stat-label">Registros Totales</div>
+    <div class="stat-value">{{ registros|length }}</div>
+    <div class="stat-change">Meses con registro</div>
+  </div>
+  <div class="stat-card orange">
+    <div class="stat-icon">🔥</div>
+    <div class="stat-label">Racha Máxima</div>
+    <div class="stat-value">{{ user.racha.racha_maxima|default:0 }} días</div>
+    <div class="stat-change">Consecutivos</div>
+  </div>
+  <div class="stat-card purple">
+    <div class="stat-icon">🏆</div>
+    <div class="stat-label">Logros Obtenidos</div>
+    <div class="stat-value">{{ total_logros }}</div>
+    <div class="stat-change">de {{ total_logros_posibles }} disponibles</div>
+  </div>
+</div>
+
+<div class="card mb-6">
+  <div class="card-header"><div class="card-title">Ahorro Mensual en el Tiempo</div></div>
+  <div class="card-body"><div class="chart-container tall"><canvas id="progresoChart"></canvas></div></div>
+</div>
+
+<div class="card">
+  <div class="card-header mb-4"><div class="card-title">Tasa de Ahorro por Mes</div></div>
+  <div class="card-body" style="padding-top:0;">
+    <div class="chart-container"><canvas id="tasaChart"></canvas></div>
+  </div>
+</div>
+
+{% else %}
+<div class="card">
+  <div class="empty-state">
+    <div class="empty-icon">📉</div>
+    <h3>Sin datos de progreso aún</h3>
+    <p style="margin-bottom:16px;">Crea registros mensuales para ver tu evolución financiera.</p>
+    <a href="{% url 'financiero:registro_create' %}" class="btn btn-primary" style="width:auto;display:inline-flex;">
+      + Crear primer registro
+    </a>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const mesesLabels = {{ meses_labels|safe }};
+const ahorroData  = {{ ahorro_data|safe }};
+const tasaData    = {{ tasa_data|safe }};
+
+document.addEventListener('DOMContentLoaded', () => {
+  if (mesesLabels.length) {
+    mkLine('progresoChart', mesesLabels, ahorroData, 'Ahorro (S/)', 'rgba(16,185,129,');
+    mkLine('tasaChart', mesesLabels, tasaData, 'Tasa de Ahorro %', 'rgba(139,92,246,');
+  }
+});
+</script>
+{% endblock %}

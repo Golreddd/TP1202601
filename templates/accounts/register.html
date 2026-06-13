@@ -1,0 +1,60 @@
+{% extends "base_auth.html" %}
+{% block title %}Crear cuenta{% endblock %}
+
+{% block content %}
+<div class="auth-title">Crear cuenta nueva</div>
+<div class="auth-subtitle">Comienza tu camino hacia la libertad financiera</div>
+
+<form method="post" action="{% url 'accounts:register' %}">
+  {% csrf_token %}
+
+  {% if form.non_field_errors %}
+    <div class="non-field-errors">{{ form.non_field_errors }}</div>
+  {% endif %}
+
+  <div class="form-row cols-2">
+    <div class="form-group">
+      <label class="form-label">{{ form.nickname.label }}</label>
+      {{ form.nickname }}
+      {% if form.nickname.errors %}<div class="field-error">{{ form.nickname.errors.0 }}</div>{% endif %}
+    </div>
+    <div class="form-group">
+      <label class="form-label">{{ form.email.label }}</label>
+      {{ form.email }}
+      {% if form.email.errors %}<div class="field-error">{{ form.email.errors.0 }}</div>{% endif %}
+    </div>
+  </div>
+
+  <div class="form-row cols-2">
+    <div class="form-group">
+      <label class="form-label">{{ form.password.label }}</label>
+      {{ form.password }}
+      {% if form.password.errors %}<div class="field-error">{{ form.password.errors.0 }}</div>{% endif %}
+    </div>
+    <div class="form-group">
+      <label class="form-label">{{ form.password2.label }}</label>
+      {{ form.password2 }}
+      {% if form.password2.errors %}<div class="field-error">{{ form.password2.errors.0 }}</div>{% endif %}
+    </div>
+  </div>
+
+  <div class="auth-divider">Perfil financiero (opcional — mejora el análisis ML)</div>
+
+  <div class="form-row cols-2">
+    <div class="form-group">
+      <label class="form-label">{{ form.edad.label }}</label>
+      {{ form.edad }}
+    </div>
+    <div class="form-group">
+      <label class="form-label">{{ form.nivel_educ.label }}</label>
+      {{ form.nivel_educ }}
+    </div>
+  </div>
+
+  <button type="submit" class="btn btn-primary">Crear Cuenta</button>
+</form>
+
+<div class="auth-link">
+  ¿Ya tienes cuenta? <a href="{% url 'accounts:login' %}">Inicia sesión</a>
+</div>
+{% endblock %}

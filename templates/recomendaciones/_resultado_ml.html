@@ -1,0 +1,161 @@
+{% comment %}
+Bloque reutilizable que muestra el resultado de un análisis ML:
+clasificación, métricas, planes de optimización, alternativas y SHAP.
+Contexto requerido: ultimo (ResultadoML), detalle (dict recomputado),
+planes_convergen (bool), plan_activo_nombre (str).
+Usado por ml_insights.html y historial_detalle.html.
+{% endcomment %}
+<!-- ===== RESULTADO ML ===== -->
+
+{% with cl=ultimo.cluster_label %}
+<div class="classification-card
+  {% if 'equilibrio' in cl|lower %}saver
+  {% elif 'moderado' in cl|lower %}low
+  {% else %}nonsaver{% endif %} mb-6">
+  <div style="font-size:48px;margin-bottom:8px;">
+    {% if 'equilibrio' in cl|lower %}⭐
+    {% elif 'moderado' in cl|lower %}⚠️
+    {% else %}🚨{% endif %}
+  </div>
+  <div class="class-badge">{{ ultimo.cluster_label }}</div>
+  <div class="text-sm text-muted mt-4 mb-4">Clasificación ML · {{ ultimo.creado_en|date:"d/m/Y H:i" }}</div>
+  <div class="class-desc">{{ ultimo.confianza }}</div>
+  {% if ultimo.ahorro_actual < 0 %}
+  <div style="margin-top:14px;background:rgba(245,158,11,.15);border:1px solid rgba(245,158,11,.4);border-radius:8px;padding:10px 14px;font-size:13px;color:#92400e;max-width:520px;margin-left:auto;margin-right:auto;text-align:left;">
+    ⚠️
+    {% if 'equilibrio' in cl|lower %}
+      El cluster refleja tu nivel de ingresos, no tu ahorro actual. Aunque el modelo te clasifica en Equilibrio Financiero por tus ingresos, actualmente tus gastos superan tus ingresos.
+    {% else %}
+      Tus gastos superan tus ingresos. Se requieren ajustes urgentes.
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+{% endwith %}
+
+<!-- Métricas clave -->
+<div class="stats-grid mb-6" style="grid-template-columns:repeat(3,1fr);">
+  <div class="stat-card green">
+    <div class="stat-icon">💰</div>
+    <div class="stat-label">Ahorro Predicho</div>
+    <div class="stat-value">S/ {{ ultimo.ahorro_actual|floatformat:0 }}</div>
+  </div>
+  <div class="stat-card blue">
+    <div class="stat-icon">🎯</div>
+    <div class="stat-label">Meta Validada</div>
+    <div class="stat-value">S/ {{ ultimo.meta_validada|floatformat:0 }}</div>
+  </div>
+  <div class="stat-card {% if ultimo.alcanza_meta %}green{% else %}orange{% endif %}">
+    <div class="stat-icon">{% if ultimo.alcanza_meta %}✅{% else %}⚠️{% endif %}</div>
+    <div class="stat-label">Gap (Meta − Ahorro)</div>
+    <div class="stat-value">S/ {{ ultimo.gap|floatformat:0 }}</div>
+    <div class="stat-change {% if ultimo.alcanza_meta %}up{% else %}down{% endif %}">
+      {% if ultimo.alcanza_meta %}Meta alcanzable{% else %}Requiere ajuste{% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- Diagnóstico financiero (renderizado por JS) -->
+<div id="diagBanner" class="mb-6"></div>
+
+{% if detalle.planes %}
+<!-- Planes de acción -->
+<div class="card mb-6">
+  <div class="card-header mb-4">
+    <div class="card-title">📋 Planes de Optimización</div>
+    <div class="text-sm text-muted" style="margin-top:4px;">
+      Proyección de ahorro máximo según el modelo ML, ajustando tus gastos actuales
+    </div>
+  </div>
+
+  <!-- Banner estado de planes (renderizado por JS) -->
+  <div id="planesBanner" class="mb-4"></div>
+
+  {% if planes_convergen %}
+  <div style="background:rgba(148,163,184,0.1);border:1px solid rgba(148,163,184,0.2);border-radius:8px;padding:10px 14px;margin:0 0 16px 0;font-size:12px;color:#94a3b8;">
+    ℹ️ Los tres planes alcanzan el mismo ahorro máximo predicho (<strong style="color:#e2e8f0;">S/ {{ detalle.planes.0.ahorro_predicho|floatformat:0 }}</strong>) porque
+    el modelo ML converge al mismo óptimo para tu perfil. Cada plan sí difiere en <em>cómo</em> distribuye los recortes por categoría.
+  </div>
+  {% endif %}
+
+  <div class="card-body" style="padding-top:0;">
+    <div class="grid-3">
+      {% for plan in detalle.planes %}
+      {% with n=plan.nombre|lower %}
+      <div id="plan-card-{{ forloop.counter0 }}" class="plan-card {% if n == 'conservador' or n == 'balanceado' or n == 'agresivo' %}{{ n }}{% else %}conservador{% endif %}">
+        <div class="plan-title">
+          {% if n == 'conservador' %}🌿 Conservador
+          {% elif n == 'balanceado' %}⚖️ Balanceado
+          {% elif n == 'agresivo' %}🚀 Agresivo
+          {% else %}✅ {{ plan.nombre }}{% endif %}
+        </div>
+        <div class="text-xs text-muted" style="margin-bottom:8px;">
+          {% if n == 'conservador' %}Recorte moderado en gastos discrecionales
+          {% elif n == 'balanceado' %}Recorte equilibrado en todos los gastos
+          {% elif n == 'agresivo' %}Recorte agresivo para maximizar ahorro
+          {% endif %}
+        </div>
+        <div class="plan-ahorro {% if n == 'conservador' or n == 'balanceado' or n == 'agresivo' %}{{ n }}{% else %}conservador{% endif %}">
+          S/ {{ plan.ahorro_predicho|floatformat:0 }}
+        </div>
+        <div class="text-xs text-muted mb-3">Ahorro proyectado por el modelo</div>
+        {% for col, datos in plan.gastos.items %}
+          {% if datos.delta %}
+          <div class="plan-row">
+            <span class="text-sm">{{ col|slice:"6:" }}</span>
+            <span class="plan-delta {% if datos.delta < 0 %}neg{% else %}pos{% endif %}">
+              {% if datos.delta < 0 %}−S/ {{ datos.delta|floatformat:0|cut:"-" }}
+              {% else %}+S/ {{ datos.delta|floatformat:0 }}{% endif %}
+            </span>
+          </div>
+          {% endif %}
+        {% endfor %}
+        <div class="plan-meta-status mt-3 text-sm"></div>
+        {% if n == 'conservador' or n == 'balanceado' or n == 'agresivo' %}
+        <button
+          id="btn-elegir-{{ forloop.counter0 }}"
+          onclick="elegirPlan('{{ plan.nombre }}', {{ ultimo.id }}, this)"
+          class="btn btn-sm mt-3"
+          style="width:100%;font-size:12px;
+            {% if plan_activo_nombre == plan.nombre %}
+              background:rgba(16,185,129,.2);color:#065f46;border:1.5px solid rgba(16,185,129,.5);cursor:default;
+            {% elif n == 'conservador' %}
+              background:rgba(16,185,129,.08);color:#065f46;border:1.5px solid rgba(16,185,129,.3);
+            {% elif n == 'balanceado' %}
+              background:rgba(59,130,246,.08);color:#1e40af;border:1.5px solid rgba(59,130,246,.25);
+            {% else %}
+              background:rgba(245,158,11,.08);color:#92400e;border:1.5px solid rgba(245,158,11,.3);
+            {% endif %}"
+          {% if plan_activo_nombre == plan.nombre %}disabled{% endif %}>
+          {% if plan_activo_nombre == plan.nombre %}✅ Plan activo{% else %}📌 Elegir este plan{% endif %}
+        </button>
+        {% endif %}
+      </div>
+      {% endwith %}
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- Alternativas (renderizado por JS cuando ≤ 1 plan cumple meta) -->
+<div id="alternativasSec" class="mb-6"></div>
+
+{% if detalle.explicacion_shap %}
+<!-- Factores SHAP — dos secciones -->
+<div class="card mb-6">
+  <div class="card-header mb-4"><div class="card-title">📊 Factores que Influyen en tu Ahorro</div></div>
+  <div class="card-body" style="padding-top:0;">
+    <div class="mb-1" style="font-size:13px;font-weight:600;color:var(--text2);">Gastos que puedes controlar</div>
+    <div class="text-xs text-muted mb-3">Verde = favorece ahorro · Rojo = reduce ahorro</div>
+    <div class="chart-container" style="height:220px;">
+      <canvas id="shapAccionablesChart"></canvas>
+    </div>
+    <div class="mb-1 mt-5" style="font-size:13px;font-weight:600;color:var(--text2);">Factores de contexto</div>
+    <div class="info-box mb-3" style="font-size:12px;">ℹ️ Estos factores explican tu ahorro pero no se recomiendan como acciones inmediatas.</div>
+    <div class="chart-container" style="height:160px;">
+      <canvas id="shapInfoChart"></canvas>
+    </div>
+  </div>
+</div>
+{% endif %}

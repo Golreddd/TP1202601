@@ -1,0 +1,41 @@
+# Entorno virtual
+venv/
+env/
+.venv/
+
+# Variables de entorno (NUNCA commitear)
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+
+# Django
+db.sqlite3
+*.log
+staticfiles/
+media/
+*.pot
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
+
+# Notebooks
+*.ipynb_checkpoints/
+*.ipynb
+
+# Archivos de datos y comprimidos (no para producción)
+*.zip
+*.csv
+
+# Claude Code
+.claude/
