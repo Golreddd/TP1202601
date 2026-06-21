@@ -1,19 +1,29 @@
 -- ============================================================
---  SIGAMOS — Esquema de Base de Datos PostgreSQL v2.1
+--  SIGAMOS — Esquema de Base de Datos PostgreSQL v2.2
 --  Proyecto: Sistema de Recomendación Financiera con ML
 --  Universidad: UPC — Ingeniería de Sistemas de Información
 --  Base de datos: sigamos_db
 --  Generado para: Vertabelo
 --
+--  Modelo ML: XGBoost Classifier binario (Déficit=0 / Ahorra=1).
+--  NO hay K-Means ni regresión de montos (eliminados por completo).
+--
 --  Decisiones de diseño:
 --  - Tabla PerfilFinanciero ELIMINADA: campos integrados en accounts_usuario
 --  - Bonificación integrada como columna en financiero_registromensual
 --    (no es tabla aparte): se suma al ingreso de planilla antes del ML
---  - ResultadoML sin JSONs: planes/SHAP se recomputan on-demand desde predict.py
+--  - ResultadoML guarda la CLASIFICACIÓN (clase/label/prob/confianza) + un JSON
+--    ligero de top features SHAP; las opciones de recorte se recomputan on-demand
+--  - ResultadoML separa mes_referencia_id (mes clasificado) de registro_id
+--    (mes actual sobre el que se genera el plan counterfactual)
 --  - RBAC con tabla accounts_rol (FK directa, no ManyToMany)
 --  - Gamificación funcional: Racha + Logro + LogroUsuario con lógica de desbloqueo
 --  - PlanSeleccionado: un único plan activo por usuario garantizado por
 --    índice único parcial (WHERE activo)
+--
+--  NOTA: este esquema documenta las 13 tablas de NEGOCIO. Las tablas internas
+--  de Django (auth_*, django_*) las crea el framework con `migrate` y no se
+--  modelan aquí.
 -- ============================================================
 
 
@@ -196,25 +206,31 @@ COMMENT ON COLUMN recomendaciones_metalargoplazo.activa IS 'FALSE = soft delete.
 --  6. recomendaciones_resultadoml
 --     Resultado ESCALARES de cada ejecución de recommend().
 --
---     Diseño deliberado: NO almacena planes ni SHAP.
---     Los planes (conservador/balanceado/agresivo) y el top 5 SHAP
+--     Modelo nuevo: XGBoost Classifier binario (Déficit/Ahorra).
+--     NO hay K-Means ni montos predichos.
+--     Diseño deliberado: NO almacena opciones ni SHAP completo.
+--     Las estrategias (Suave/Equilibrado/Decidido) y el SHAP
 --     se recomputan llamando a recommend() desde el RegistroMensual
 --     original cuando el usuario consulta el detalle.
 --     Esto mantiene la BD ligera y desacoplada de predict.py.
 -- ============================================================
 CREATE TABLE recomendaciones_resultadoml (
-    id              BIGSERIAL           NOT NULL,
-    usuario_id      BIGINT              NOT NULL,
-    registro_id     BIGINT              NOT NULL,
-    meta_id         BIGINT,
+    id                  BIGSERIAL           NOT NULL,
+    usuario_id          BIGINT              NOT NULL,
+    registro_id         BIGINT              NOT NULL,
+    mes_referencia_id   BIGINT,
+    meta_id             BIGINT,
     -- Escalares de recommend()
-    ahorro_actual   DOUBLE PRECISION    NOT NULL,
-    meta_validada   DOUBLE PRECISION    NOT NULL,
-    gap             DOUBLE PRECISION    NOT NULL,
-    cluster_id      INTEGER             NOT NULL,
-    cluster_label   VARCHAR(150)        NOT NULL,
-    confianza       VARCHAR(250)        NOT NULL,
-    creado_en       TIMESTAMPTZ         NOT NULL    DEFAULT NOW(),
+    ahorro_actual       DOUBLE PRECISION    NOT NULL,   -- identidad contable real (no predicho)
+    meta_validada       DOUBLE PRECISION    NOT NULL,
+    necesita_recortar   DOUBLE PRECISION    NOT NULL    DEFAULT 0,
+    -- Clasificación binaria (XGBoost Classifier)
+    clase_predicha      INTEGER             NOT NULL    DEFAULT 0,   -- 0=Déficit, 1=Ahorra
+    label_predicha      VARCHAR(20)         NOT NULL    DEFAULT '',
+    prob_ahorra         DOUBLE PRECISION    NOT NULL    DEFAULT 0,
+    confianza           VARCHAR(250)        NOT NULL,
+    shap_top_features   JSONB               NOT NULL    DEFAULT '[]',
+    creado_en           TIMESTAMPTZ         NOT NULL    DEFAULT NOW(),
 
     CONSTRAINT pk_resultadoml           PRIMARY KEY (id),
     CONSTRAINT fk_resultado_usuario     FOREIGN KEY (usuario_id)
@@ -223,15 +239,19 @@ CREATE TABLE recomendaciones_resultadoml (
     CONSTRAINT fk_resultado_registro    FOREIGN KEY (registro_id)
                                         REFERENCES  financiero_registromensual (id)
                                         ON DELETE   CASCADE,
+    CONSTRAINT fk_resultado_mes_ref     FOREIGN KEY (mes_referencia_id)
+                                        REFERENCES  financiero_registromensual (id)
+                                        ON DELETE   SET NULL,
     CONSTRAINT fk_resultado_meta        FOREIGN KEY (meta_id)
                                         REFERENCES  recomendaciones_metamensual (id)
                                         ON DELETE   SET NULL,
-    CONSTRAINT ck_resultado_cluster     CHECK (cluster_id >= 0)
+    CONSTRAINT ck_resultado_clase       CHECK (clase_predicha IN (0, 1))
 );
 
-COMMENT ON TABLE  recomendaciones_resultadoml              IS 'Escalares del pipeline ML. Planes/SHAP se recomputan on-demand.';
-COMMENT ON COLUMN recomendaciones_resultadoml.gap          IS 'meta_validada - ahorro_actual. Positivo = déficit.';
-COMMENT ON COLUMN recomendaciones_resultadoml.confianza    IS '"Alta" / "Media — ..." / "Baja — ..."';
+COMMENT ON TABLE  recomendaciones_resultadoml                   IS 'Escalares del pipeline ML (clasificación binaria). Opciones/SHAP se recomputan on-demand.';
+COMMENT ON COLUMN recomendaciones_resultadoml.necesita_recortar IS 'max(meta_validada - ahorro_actual, 0). 0 = ya cumple.';
+COMMENT ON COLUMN recomendaciones_resultadoml.clase_predicha    IS '0 = Déficit, 1 = Ahorra (XGBoost Classifier binary:logistic).';
+COMMENT ON COLUMN recomendaciones_resultadoml.confianza         IS '"Alta" / "Media" / "Baja" según margen sobre 0.5.';
 
 
 -- ============================================================
@@ -258,7 +278,7 @@ CREATE TABLE recomendaciones_planseleccionado (
     CONSTRAINT fk_plansel_resultado     FOREIGN KEY (resultado_id)
                                         REFERENCES  recomendaciones_resultadoml (id)
                                         ON DELETE   SET NULL,
-    CONSTRAINT ck_plansel_nombre        CHECK (nombre_plan IN ('Conservador', 'Balanceado', 'Agresivo'))
+    CONSTRAINT ck_plansel_nombre        CHECK (nombre_plan IN ('Suave', 'Equilibrado', 'Decidido'))
 );
 
 COMMENT ON TABLE  recomendaciones_planseleccionado                  IS 'Plan de optimización activo elegido por el usuario. Uno activo por usuario.';
@@ -406,11 +426,11 @@ COMMENT ON TABLE token_blacklist_blacklistedtoken IS 'Tokens invalidados por POS
 CREATE INDEX idx_usuario_rol            ON accounts_usuario (rol_id);
 CREATE INDEX idx_registro_usuario       ON financiero_registromensual (usuario_id);
 CREATE INDEX idx_registro_periodo       ON financiero_registromensual (periodo DESC);
--- ResultadoML: índices para historial (usuario+fecha) y métricas (cluster)
+-- ResultadoML: índices para historial (usuario+fecha) y métricas (clase Ahorra/Déficit)
 CREATE INDEX idx_resultado_usuario      ON recomendaciones_resultadoml (usuario_id);
 CREATE INDEX idx_resultado_creado       ON recomendaciones_resultadoml (creado_en DESC);
 CREATE INDEX idx_resml_user_fecha       ON recomendaciones_resultadoml (usuario_id, creado_en DESC);
-CREATE INDEX idx_resml_cluster          ON recomendaciones_resultadoml (cluster_label);
+CREATE INDEX idx_resml_clase            ON recomendaciones_resultadoml (label_predicha);
 CREATE INDEX idx_metamensual_usuario    ON recomendaciones_metamensual (usuario_id);
 CREATE INDEX idx_metalargo_usuario      ON recomendaciones_metalargoplazo (usuario_id);
 CREATE INDEX idx_metalargo_activa       ON recomendaciones_metalargoplazo (usuario_id, activa);
@@ -443,7 +463,7 @@ INSERT INTO gamificacion_logro (codigo, nombre, descripcion, icono, puntos, orde
 ('AHORRADOR_20',      'Ahorrador Responsable',   'Tasa de ahorro del 20% o más en un mes.',             '💰', 75,  7),
 ('PERFIL_COMPLETO',   'Perfil Listo',            'Completaste todos los datos de tu perfil financiero.','✅', 15,  8),
 ('CINCO_REGISTROS',   'Disciplina Financiera',   'Creaste 5 registros mensuales.',                      '📊', 60,  9),
-('CLUSTER_AHORRADOR', 'Ahorrador Ejemplar',      'El modelo ML te clasificó como Ahorrador.',           '⭐', 200, 10),
+('CLUSTER_AHORRADOR', 'Clasificado Ahorrador',   'El modelo te clasificó como "Ahorra".',               '⭐', 200, 10),
 ('TRES_MESES_VERDE',  'Tres Meses en Verde',     'Ahorro positivo durante 3 meses consecutivos.',       '🌱', 120, 11),
 ('MAESTRO_AHORRO',    'Maestro del Ahorro',      'Cumpliste 5 metas de ahorro.',                        '👑', 500, 12);
 
@@ -452,19 +472,28 @@ INSERT INTO gamificacion_logro (codigo, nombre, descripcion, icono, puntos, orde
 --  RESUMEN DEL ESQUEMA
 --
 --  Tablas:       13  (11 de negocio + 2 JWT)
---  FK totales:   15
---  Índices:      18  (incl. 1 índice único parcial: plan activo)
+--  FK totales:   17
+--  Índices:      16  (CREATE INDEX explícitos; incl. 1 único parcial: plan activo)
 --  Roles:         2  (USUARIO, ADMIN)
 --  Logros:       12
 --
---  Cambios respecto a v2.0:
+--  Cambios v2.2 (migración a XGBoost Classifier — sin K-Means ni regresión):
+--  - ✅ recomendaciones_resultadoml: −cluster_id, −cluster_label, −gap
+--       +clase_predicha, +label_predicha, +prob_ahorra, +necesita_recortar,
+--       +shap_top_features (JSONB), +mes_referencia_id (FK)
+--       índice idx_resml_cluster → idx_resml_clase (sobre label_predicha)
+--  - ✅ recomendaciones_planseleccionado: nombre_plan
+--       'Conservador/Balanceado/Agresivo' → 'Suave/Equilibrado/Decidido'
+--  - ✅ gamificacion_logro: logro CLUSTER_AHORRADOR renombrado a "Clasificado
+--       Ahorrador" (se otorga cuando el clasificador predice clase 1)
+--
+--  Cambios v2.1 (respecto a v2.0):
 --  - ✅ financiero_registromensual: +bonif_monto (bonificación del mes,
 --       integrada como columna; se suma a ing_planilla antes del ML)
 --  - ✅ recomendaciones_planseleccionado: tabla documentada (faltaba en v2.0)
 --       + índice único parcial 'unico_plan_activo_por_usuario'
 --  - 🔧 recomendaciones_metalargoplazoo  → recomendaciones_metalargoplazo (typo)
 --  - 🔧 gamificacion_logroupsuario       → gamificacion_logrousuario (typo)
---  - ✅ recomendaciones_resultadoml: +índices idx_resml_user_fecha, idx_resml_cluster
 --
 --  Relaciones principales:
 --    accounts_rol 1───N accounts_usuario
@@ -472,7 +501,8 @@ INSERT INTO gamificacion_logro (codigo, nombre, descripcion, icono, puntos, orde
 --                            resultadoml / planseleccionado / auditlog
 --    accounts_usuario 1───1 gamificacion_racha
 --    accounts_usuario N───M gamificacion_logro  (via gamificacion_logrousuario)
---    registromensual 1───N resultadoml
+--    registromensual 1───N resultadoml (registro_id = mes actual, CASCADE)
+--    registromensual 1───N resultadoml (mes_referencia_id = mes clasificado, SET NULL)
 --    metamensual     1───N resultadoml          (SET NULL)
 --    resultadoml     1───N planseleccionado      (SET NULL)
 -- ============================================================

@@ -1,6 +1,7 @@
 {% comment %}
 JS reutilizable para renderizar el resultado ML (diagnóstico, banners de
-planes, badges, alternativas y gráficos SHAP) + elegir plan.
+estrategias, badges, alternativas y gráfico SHAP de dirección) + elegir plan.
+Modelo nuevo: XGBoost Classifier binario (sin K-Means, sin monto predicho).
 Requiere la variable de contexto ml_js (string JSON). Debe incluirse
 dentro de un <script> y después de que sigamos.js (chartDefaults,
 showToast, csrfToken) esté cargado. Usado por ml_insights.html y
@@ -8,19 +9,35 @@ historial_detalle.html.
 {% endcomment %}
 {% if ml_js %}
 const _ml = {{ ml_js|safe }};
-const mlData    = { ahorro: _ml.ahorro, meta: _ml.meta, ingTotal: _ml.ingTotal, gastoTotal: _ml.gastoTotal };
-const planesData = _ml.planes || [];
-const shapData   = _ml.shap   || [];
+const mlData      = { ahorro: _ml.ahorro, meta: _ml.meta, ingTotal: _ml.ingTotal,
+                      gastoTotal: _ml.gastoTotal, clase: _ml.clase, label: _ml.label,
+                      probAhorra: _ml.probAhorra };
+const opcionesData = _ml.opciones || [];
+const shapData     = _ml.shap     || [];
+
+// Etiquetas legibles para las 19 features del modelo.
+const FEATURE_LABELS = {
+  NIVEL_EDUC: 'Nivel educativo', MIEMBROS_HOGAR: 'Miembros del hogar',
+  DEPENDE_INFORMAL: 'Dependencia informal', ING_PLANILLA: 'Ingreso planilla',
+  ING_INFORMAL: 'Ingreso informal', LOG_ING: 'Ingreso (log)',
+  ING_PER_CAPITA: 'Ingreso per cápita', INFORMAL_SHARE: 'Proporción informal',
+  PRESION_FINANCIERA: 'Presión financiera', COMMIT_PER_CAPITA: 'Compromiso per cápita',
+  GASTO_ALIMENTOS_R: 'Gasto alimentos', GASTO_VIVIENDA_SERVICIOS_R: 'Gasto vivienda',
+  GASTO_TRANSPORTE_R: 'Gasto transporte', GASTO_SALUD_R: 'Gasto salud',
+  GASTO_EDUCACION_R: 'Gasto educación', ESTRATO_SOC: 'Estrato social',
+  TIPO_FORMAL: 'Empleo formal', TIPO_INFORMAL: 'Empleo informal', TIPO_MIXTO: 'Empleo mixto',
+};
+function featureLabel(f) { return FEATURE_LABELS[f] || f.replace(/_/g, ' '); }
 
 document.addEventListener('DOMContentLoaded', function() {
   renderDiagBanner();
   renderPlanesBanner();
   renderPlanBadges();
   renderAlternativas();
-  if (shapData.length) renderShapCharts();
+  if (shapData.length) renderShapChart();
 });
 
-// ── Corrección 3: Diagnóstico financiero ──────────────────────────────────────
+// ── Diagnóstico financiero (identidad contable, complementa la clasificación) ──
 function renderDiagBanner() {
   const el = document.getElementById('diagBanner');
   if (!el) return;
@@ -57,44 +74,37 @@ function renderDiagBanner() {
   </div>`;
 }
 
-// ── Corrección 2: Banner estado de planes ─────────────────────────────────────
+// ── Banner estado de estrategias ──────────────────────────────────────────────
 function renderPlanesBanner() {
   const el = document.getElementById('planesBanner');
-  if (!el) return;
-  const { meta } = mlData;
-  const planNames = ['conservador', 'balanceado', 'agresivo'];
-  const principales = planesData.filter(p => planNames.includes((p.nombre || '').toLowerCase()));
-  if (!principales.length) return;
-  const cumplen = principales.filter(p => (p.ahorro_predicho || 0) >= meta);
+  if (!el || !opcionesData.length) return;
+  const cumplen = opcionesData.filter(o => o.alcanza_meta);
   let style, texto;
-  if (cumplen.length >= principales.length) {
+  if (cumplen.length >= opcionesData.length) {
     style = 'background:rgba(16,185,129,.1);border:1.5px solid rgba(16,185,129,.35);color:#065f46;';
-    texto = '✅ <strong>Los 3 planes alcanzan tu meta.</strong> Elige el más cómodo para ti.';
-  } else if (cumplen.length === 1 && (cumplen[0].nombre || '').toLowerCase() === 'agresivo') {
-    style = 'background:rgba(245,158,11,.1);border:1.5px solid rgba(245,158,11,.35);color:#92400e;';
-    texto = '⚡ <strong>Solo el Plan Agresivo alcanza tu meta.</strong> Evalúa si es sostenible.';
+    texto = '✅ <strong>Todas las estrategias alcanzan tu meta.</strong> Elige la más cómoda para ti.';
   } else if (cumplen.length === 0) {
     style = 'background:rgba(239,68,68,.08);border:1.5px solid rgba(239,68,68,.3);color:#dc2626;';
-    texto = '❌ <strong>Ningún plan alcanza tu meta.</strong> Considera reducirla o aumentar ingresos.';
+    texto = '❌ <strong>Ninguna estrategia de recorte alcanza tu meta.</strong> Considera reducirla o aumentar ingresos.';
   } else {
-    return;
+    const masSuave = cumplen[0];
+    style = 'background:rgba(245,158,11,.1);border:1.5px solid rgba(245,158,11,.35);color:#92400e;';
+    texto = `⚡ <strong>La estrategia más suave que alcanza tu meta es "${masSuave.nombre}".</strong> Evalúa si es sostenible.`;
   }
   el.innerHTML = `<div style="${style}border-radius:var(--radius-sm);padding:12px 16px;font-size:13px;">${texto}</div>`;
 }
 
-// ── Corrección 2: Badges por tarjeta ─────────────────────────────────────────
+// ── Badges por tarjeta ────────────────────────────────────────────────────────
 function renderPlanBadges() {
-  const { meta } = mlData;
-  planesData.forEach((plan, i) => {
+  opcionesData.forEach((op, i) => {
     const card = document.getElementById('plan-card-' + i);
     if (!card) return;
     const statusDiv = card.querySelector('.plan-meta-status');
     if (!statusDiv) return;
-    const ahorro = plan.ahorro_predicho || 0;
-    if (ahorro >= meta) {
+    if (op.alcanza_meta) {
       statusDiv.innerHTML = '<span style="color:#059669;font-weight:700;">✅ Meta alcanzada</span>';
     } else {
-      const falta = Math.ceil(meta - ahorro);
+      const falta = Math.ceil(op.faltante || 0);
       statusDiv.innerHTML = `<span style="color:#dc2626;font-weight:700;">❌ Faltan S/ ${falta.toLocaleString('es-PE')}</span>`;
     }
   });
@@ -105,25 +115,26 @@ function renderAlternativas() {
   const el = document.getElementById('alternativasSec');
   if (!el) return;
 
-  const planNames = ['conservador', 'balanceado', 'agresivo'];
-  const principales = planesData.filter(p => planNames.includes((p.nombre || '').toLowerCase()));
-  const cumplen = principales.filter(p => (p.ahorro_predicho || 0) >= mlData.meta);
+  // Si ya cumples la meta (tu ahorro ≥ meta), no necesitas recortes ni alternativas.
+  // Evita además mostrar "incrementar ingresos" con un valor negativo sin sentido.
+  if (mlData.ahorro >= mlData.meta) return;
 
-  // Solo mostrar si 0 o 1 planes cumplen la meta
+  const cumplen = opcionesData.filter(o => o.alcanza_meta);
+  // Solo mostrar si 0 o 1 estrategias cumplen la meta
   if (cumplen.length >= 2) return;
 
   const ingreso_adicional = Math.ceil(mlData.meta - mlData.ahorro);
 
-  const planConservador = principales.find(p => (p.nombre || '').toLowerCase() === 'conservador');
-  const ahorro_conservador = planConservador ? (planConservador.ahorro_predicho || 0) : 0;
+  const opcionSuave = opcionesData.find(o => (o.nombre || '').toLowerCase() === 'suave');
+  const ahorro_suave = opcionSuave ? (opcionSuave.ahorro_resultante || 0) : 0;
 
   let tarjetaDerecha;
-  if (ahorro_conservador > 0) {
-    const s = Math.round(ahorro_conservador);
+  if (ahorro_suave > 0) {
+    const s = Math.round(ahorro_suave);
     tarjetaDerecha = `
       <div class="card-title mb-2" style="font-size:15px;">🎯 Meta alternativa</div>
       <p style="font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:10px;">
-        Con el Plan Conservador (sin tocar gastos esenciales) alcanzarías
+        Con la estrategia Suave (sin tocar gastos esenciales) llegarías a
         <strong style="color:var(--accent-dark);">S/ ${s.toLocaleString('es-PE')}/mes</strong>.
         Considera si esta es una meta más realista como primer paso.
       </p>`;
@@ -142,7 +153,7 @@ function renderAlternativas() {
       <div class="card-header mb-4">
         <div class="card-title">💡 Alternativas para tu situación</div>
         <div class="text-sm text-muted" style="margin-top:4px;">
-          Opciones adicionales cuando los planes de optimización no son suficientes
+          Opciones adicionales cuando las estrategias de recorte no son suficientes
         </div>
       </div>
       <div class="card-body" style="padding-top:0;">
@@ -163,54 +174,31 @@ function renderAlternativas() {
     </div>`;
 }
 
-// ── Corrección 1: Gráficos SHAP separados ─────────────────────────────────────
-function renderShapCharts() {
-  const THRESHOLD = 0.01;
-  const accionables = shapData.filter(x => (x.feature || '').startsWith('GASTO_'));
-  const informativos = shapData.filter(x => !(x.feature || '').startsWith('GASTO_'));
-
-  // Sección A — Gastos accionables (verde si favorece ahorro, rojo si lo reduce)
-  const ctxA = document.getElementById('shapAccionablesChart');
-  if (ctxA && accionables.length) {
-    const labelsA = accionables.map(x => {
-      const nombre = x.feature.replace('GASTO_', '');
-      return Math.abs(x.shap_value) < THRESHOLD ? nombre + ' (sin impacto)' : nombre;
-    });
-    const valsA = accionables.map(x => Math.abs(x.shap_value) < THRESHOLD ? 0 : x.shap_value);
-    const colsA = valsA.map(v => v >= 0 ? 'rgba(16,185,129,.75)' : 'rgba(239,68,68,.75)');
-    new Chart(ctxA, {
-      type: 'bar',
-      data: { labels: labelsA, datasets: [{ label: 'Impacto SHAP', data: valsA, backgroundColor: colsA, borderRadius: 4, borderSkipped: false }] },
-      options: { ...chartDefaults, indexAxis: 'y',
-        scales: {
-          x: { grid: { color: 'rgba(0,0,0,.04)' }, ticks: { color: '#94a3b8' } },
-          y: { grid: { display: false }, ticks: { color: '#64748b', font: { size: 12 } } }
-        }
+// ── Gráfico SHAP — dirección hacia Ahorra (+) / Déficit (−) ───────────────────
+function renderShapChart() {
+  const ctx = document.getElementById('shapChart');
+  if (!ctx || !shapData.length) return;
+  const labels = shapData.map(x => {
+    const dir = x.shap_value >= 0 ? '↑ ' : '↓ ';
+    return dir + featureLabel(x.feature);
+  });
+  const vals = shapData.map(x => x.shap_value);
+  const cols = vals.map(v => v >= 0 ? 'rgba(16,185,129,.75)' : 'rgba(239,68,68,.75)');
+  new Chart(ctx, {
+    type: 'bar',
+    data: { labels, datasets: [{ label: 'Impacto (log-odds)', data: vals, backgroundColor: cols, borderRadius: 4, borderSkipped: false }] },
+    options: { ...chartDefaults, indexAxis: 'y',
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { color: 'rgba(0,0,0,.04)' }, ticks: { color: '#94a3b8' } },
+        y: { grid: { display: false }, ticks: { color: '#64748b', font: { size: 12 } } }
       }
-    });
-  }
-
-  // Sección B — Factores informativos (gris, no accionables)
-  const ctxB = document.getElementById('shapInfoChart');
-  if (ctxB && informativos.length) {
-    const labelsB = informativos.map(x => x.feature);
-    const valsB   = informativos.map(x => x.shap_value);
-    const colsB   = valsB.map(() => 'rgba(148,163,184,.55)');
-    new Chart(ctxB, {
-      type: 'bar',
-      data: { labels: labelsB, datasets: [{ label: 'Impacto SHAP (contexto)', data: valsB, backgroundColor: colsB, borderRadius: 4, borderSkipped: false }] },
-      options: { ...chartDefaults, indexAxis: 'y',
-        scales: {
-          x: { grid: { color: 'rgba(0,0,0,.04)' }, ticks: { color: '#94a3b8' } },
-          y: { grid: { display: false }, ticks: { color: '#64748b', font: { size: 12 } } }
-        }
-      }
-    });
-  }
+    }
+  });
 }
 {% endif %}
 
-// ── Elegir plan de optimización ───────────────────────────────────────────────
+// ── Elegir estrategia de optimización ─────────────────────────────────────────
 function elegirPlan(nombrePlan, resultadoId, btn) {
   if (btn && btn.disabled) return;
   const textoOrig = btn ? btn.textContent : '';

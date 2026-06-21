@@ -14,7 +14,10 @@ class MetaLargoPlazoForm(forms.ModelForm):
             'icono':          forms.Select(attrs=INPUT),
             'monto_objetivo': forms.NumberInput(attrs={**INPUT, 'min': 1, 'step': '0.01', 'placeholder': '0.00'}),
             'monto_actual':   forms.NumberInput(attrs={**INPUT, 'min': 0, 'step': '0.01', 'placeholder': '0.00'}),
-            'fecha_limite':   forms.DateInput(attrs={**INPUT, 'type': 'date'}),
+            # format='%Y-%m-%d' es obligatorio: el <input type="date"> de HTML5 solo
+            # rellena su valor si viene en ISO (yyyy-mm-dd). Sin esto, al editar la
+            # fecha aparece vacía y se perdería al guardar.
+            'fecha_limite':   forms.DateInput(attrs={**INPUT, 'type': 'date'}, format='%Y-%m-%d'),
         }
 
     def clean(self):

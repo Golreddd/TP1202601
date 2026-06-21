@@ -2,6 +2,7 @@ import json
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.paginator import Paginator
 from django.shortcuts import get_object_or_404, redirect, render
 
 from core.constants import MESES_ES
@@ -13,11 +14,11 @@ from recomendaciones.models import MetaLargoPlazo, PlanSeleccionado, ResultadoML
 @login_required
 def ml_insights(request):
     """GET /recomendaciones/ — Página ML Insights con último resultado."""
-    resultados = ResultadoML.objects.filter(
+    historial_qs = ResultadoML.objects.filter(
         usuario=request.user
-    ).select_related('registro').order_by('-creado_en')[:10]
+    ).select_related('registro', 'mes_referencia').order_by('-creado_en')
 
-    ultimo = resultados.first()
+    ultimo = historial_qs.first()
     detalle = None
     planes_convergen = False
     meta_inalcanzable = False
@@ -29,28 +30,29 @@ def ml_insights(request):
         except Exception:
             detalle = None
 
-        if detalle and detalle.get('planes'):
-            planes = detalle['planes']
-            if len(planes) >= 2:
-                primer_ahorro = planes[0].get('ahorro_predicho', 0)
+        if detalle and detalle.get('opciones'):
+            opciones = detalle['opciones']
+            if len(opciones) >= 2:
+                primer_ahorro = opciones[0].get('ahorro_resultante', 0)
                 planes_convergen = all(
-                    abs(p.get('ahorro_predicho', 0) - primer_ahorro) < 1.0
-                    for p in planes[1:]
-                    if p['nombre'].lower() != 'meta ya alcanzada'
+                    abs(o.get('ahorro_resultante', 0) - primer_ahorro) < 1.0
+                    for o in opciones[1:]
                 )
-            if planes_convergen and planes:
-                max_ahorro = planes[0].get('ahorro_predicho', 0)
-                meta_inalcanzable = ultimo.meta_validada > max_ahorro
+            # Meta inalcanzable: ninguna estrategia de recorte alcanza el objetivo.
+            meta_inalcanzable = not any(o.get('alcanza_meta') for o in opciones)
 
         if detalle and ultimo.registro:
             try:
                 ml_js = json.dumps({
                     'ahorro':     round(float(ultimo.ahorro_actual), 2),
                     'meta':       round(float(ultimo.meta_validada), 2),
+                    'clase':      int(ultimo.clase_predicha),
+                    'label':      ultimo.label_predicha,
+                    'probAhorra': round(float(ultimo.prob_ahorra), 4),
                     'ingTotal':   round(float(ultimo.registro.ing_total), 2),
                     'gastoTotal': round(float(ultimo.registro.gasto_total), 2),
-                    'planes':     detalle.get('planes', []),
-                    'shap':       detalle.get('explicacion_shap', []),
+                    'opciones':   detalle.get('opciones', []),
+                    'shap':       detalle.get('diagnostico_shap', []),
                 }, ensure_ascii=False)
             except Exception:
                 ml_js = None
@@ -81,16 +83,28 @@ def ml_insights(request):
         for r in registros_qs
     ], ensure_ascii=False)
 
+    # Mes de referencia del último análisis: se pre-selecciona en el formulario
+    # para que, tras ejecutar, el selector recuerde el mes elegido (no resetee).
+    ultima_ref_id = None
+    if ultimo:
+        ultima_ref_id = ultimo.mes_referencia_id or ultimo.registro_id
+
+    # Paginación del historial (8 por página) para que no crezca indefinidamente.
+    paginator = Paginator(historial_qs, 8)
+    page_obj = paginator.get_page(request.GET.get('page'))
+
     return render(request, 'recomendaciones/ml_insights.html', {
         'ultimo':            ultimo,
         'detalle':           detalle,
-        'resultados':        resultados,
+        'page_obj':          page_obj,
+        'total_analisis':    paginator.count,
         'planes_convergen':  planes_convergen,
         'meta_inalcanzable': meta_inalcanzable,
         'ml_js':             ml_js,
         'plan_activo_nombre': plan_activo.nombre_plan if plan_activo else '',
         'tiene_registros':   registros_qs.exists(),
         'registros_js':      registros_js,
+        'ultima_ref_id':     ultima_ref_id,
     })
 
 
@@ -117,14 +131,13 @@ def historial_detalle(request, pk):
     except Exception:
         detalle = None
 
-    if detalle and detalle.get('planes'):
-        planes = detalle['planes']
-        if len(planes) >= 2:
-            primer_ahorro = planes[0].get('ahorro_predicho', 0)
+    if detalle and detalle.get('opciones'):
+        opciones = detalle['opciones']
+        if len(opciones) >= 2:
+            primer_ahorro = opciones[0].get('ahorro_resultante', 0)
             planes_convergen = all(
-                abs(p.get('ahorro_predicho', 0) - primer_ahorro) < 1.0
-                for p in planes[1:]
-                if p['nombre'].lower() != 'meta ya alcanzada'
+                abs(o.get('ahorro_resultante', 0) - primer_ahorro) < 1.0
+                for o in opciones[1:]
             )
 
     if detalle and resultado.registro:
@@ -132,10 +145,13 @@ def historial_detalle(request, pk):
             ml_js = json.dumps({
                 'ahorro':     round(float(resultado.ahorro_actual), 2),
                 'meta':       round(float(resultado.meta_validada), 2),
+                'clase':      int(resultado.clase_predicha),
+                'label':      resultado.label_predicha,
+                'probAhorra': round(float(resultado.prob_ahorra), 4),
                 'ingTotal':   round(float(resultado.registro.ing_total), 2),
                 'gastoTotal': round(float(resultado.registro.gasto_total), 2),
-                'planes':     detalle.get('planes', []),
-                'shap':       detalle.get('explicacion_shap', []),
+                'opciones':   detalle.get('opciones', []),
+                'shap':       detalle.get('diagnostico_shap', []),
             }, ensure_ascii=False)
         except Exception:
             ml_js = None

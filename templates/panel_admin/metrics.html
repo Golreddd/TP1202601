@@ -38,16 +38,16 @@
   </div>
 </div>
 
-<!-- Distribución por cluster -->
-{% if cluster_dist %}
+<!-- Distribución por clasificación (Ahorra / Déficit) -->
+{% if clase_dist %}
 <div class="grid-2">
   <div class="card">
-    <div class="card-header mb-4"><div class="card-title">Distribución ML por Cluster</div></div>
+    <div class="card-header mb-4"><div class="card-title">Distribución ML por Clasificación</div></div>
     <div class="card-body" style="padding-top:0;">
-      {% for item in cluster_dist %}
+      {% for item in clase_dist %}
       <div style="margin-bottom:14px;">
         <div class="flex flex-center justify-between mb-3">
-          <span class="font-semi text-sm">{{ item.cluster_label }}</span>
+          <span class="font-semi text-sm">{{ item.label_predicha|default:"—" }}</span>
           <span class="font-bold text-primary">{{ item.total }}</span>
         </div>
         <div class="progress-bar">
@@ -59,19 +59,19 @@
   </div>
   <div class="card">
     <div class="card-header"><div class="card-title">Distribución Visual</div></div>
-    <div class="card-body"><div class="chart-container"><canvas id="clusterChart"></canvas></div></div>
+    <div class="card-body"><div class="chart-container"><canvas id="claseChart"></canvas></div></div>
   </div>
 </div>
 {% endif %}
 {% endblock %}
 
 {% block extra_js %}
-{% if cluster_dist %}
+{% if clase_dist %}
 <script>
-const clLabels = {{ cluster_labels|safe }};
-const clData   = {{ cluster_data|safe }};
+const clLabels = {{ clase_labels|safe }};
+const clData   = {{ clase_data|safe }};
 document.addEventListener('DOMContentLoaded', () => {
-  if (clLabels.length) mkDoughnut('clusterChart', clLabels, clData);
+  if (clLabels.length) mkDoughnut('claseChart', clLabels, clData);
 });
 </script>
 {% endif %}

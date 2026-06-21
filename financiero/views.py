@@ -3,6 +3,7 @@ from datetime import date
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.paginator import Paginator
 from django.db import IntegrityError
 from django.shortcuts import get_object_or_404, redirect, render
 
@@ -51,11 +52,16 @@ def dashboard(request):
 
 @login_required
 def registro_list(request):
-    """GET /financiero/registros/ — Lista de registros mensuales."""
-    registros = RegistroMensual.objects.filter(
+    """GET /financiero/registros/ — Lista de registros mensuales (paginada)."""
+    registros_qs = RegistroMensual.objects.filter(
         usuario=request.user
     ).order_by('-periodo')
-    return render(request, 'financiero/registro_list.html', {'registros': registros})
+    paginator = Paginator(registros_qs, 8)
+    page_obj = paginator.get_page(request.GET.get('page'))
+    return render(request, 'financiero/registro_list.html', {
+        'page_obj':        page_obj,
+        'total_registros': paginator.count,
+    })
 
 
 @login_required
@@ -137,36 +143,42 @@ def analisis(request):
     if n_meses not in (6, 12):
         n_meses = 6
 
-    registros = list(
-        RegistroMensual.objects.filter(usuario=request.user).order_by('-periodo')[:n_meses]
-    )
-    registros_chart = list(reversed(registros))
+    base_qs = RegistroMensual.objects.filter(usuario=request.user).order_by('-periodo')
+
+    # Ventana de los últimos n_meses para los GRÁFICOS y el acumulado por categoría.
+    registros_ventana = list(base_qs[:n_meses])
+    registros_chart = list(reversed(registros_ventana))
 
     meses_labels  = json.dumps([MESES_ES_ABREV.get(r.periodo.month, '') for r in registros_chart])
     gastos_data   = json.dumps([float(r.gasto_total)   for r in registros_chart])
     ingresos_data = json.dumps([float(r.ing_total)     for r in registros_chart])
     ahorro_data   = json.dumps([float(r.ahorro_bruto)  for r in registros_chart])
 
-    # Acumulado por categoría (suma de todos los períodos)
+    # Acumulado por categoría (suma de los meses de la ventana)
     categorias = {
         'Alimentos': 0, 'Vestido': 0, 'Vivienda/Serv.': 0, 'Salud': 0,
         'Transporte': 0, 'Comunicaciones': 0, 'Educación': 0, 'Otros': 0,
     }
-    for r in registros:
+    for r in registros_ventana:
         for k, v in r.gastos_por_categoria().items():
             categorias[k] = categorias.get(k, 0) + v
 
     cat_labels = json.dumps(list(categorias.keys()))
     cat_data   = json.dumps(list(categorias.values()))
 
+    # Tabla "Detalle por Período": TODOS los períodos, paginados (8 por página).
+    paginator = Paginator(base_qs, 8)
+    page_obj = paginator.get_page(request.GET.get('page'))
+
     return render(request, 'financiero/analisis.html', {
-        'n_meses':      n_meses,
-        'registros':    registros,
-        'meses_labels': meses_labels,
-        'gastos_data':  gastos_data,
-        'ingresos_data':ingresos_data,
-        'ahorro_data':  ahorro_data,
-        'cat_labels':   cat_labels,
-        'cat_data':     cat_data,
-        'tiene_datos':  bool(registros),
+        'n_meses':         n_meses,
+        'page_obj':        page_obj,
+        'total_registros': paginator.count,
+        'meses_labels':    meses_labels,
+        'gastos_data':     gastos_data,
+        'ingresos_data':   ingresos_data,
+        'ahorro_data':     ahorro_data,
+        'cat_labels':      cat_labels,
+        'cat_data':        cat_data,
+        'tiene_datos':     base_qs.exists(),
     })

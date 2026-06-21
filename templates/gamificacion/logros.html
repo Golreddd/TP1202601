@@ -17,12 +17,12 @@
   <div class="streak-card">
     {% with dias=user.racha.dias_consecutivos|default:0 %}
     <div class="streak-number">🔥 {{ dias }}</div>
-    <div class="streak-label">días consecutivos con registros activos</div>
+    <div class="streak-label">día{{ dias|pluralize }} consecutivo{{ dias|pluralize }} con registros activos</div>
     {% with max=user.racha.racha_maxima|default:0 %}
     {% if max > dias %}
-      <div style="margin-top:20px;font-size:13px;opacity:.7;">Tu récord personal: {{ max }} días</div>
+      <div style="margin-top:20px;font-size:13px;opacity:.7;">Tu récord personal: {{ max }} día{{ max|pluralize }}</div>
     {% elif dias > 0 %}
-      <div style="margin-top:20px;font-size:13px;opacity:.7;">¡Iguala tu récord de {{ max }} días!</div>
+      <div style="margin-top:20px;font-size:13px;opacity:.7;">¡Iguala tu récord de {{ max }} día{{ max|pluralize }}!</div>
     {% else %}
       <div style="margin-top:20px;font-size:13px;opacity:.7;">Registra hoy para comenzar tu racha 🚀</div>
     {% endif %}
@@ -44,7 +44,7 @@
           <div class="text-xs text-muted">Por Desbloquear</div>
         </div>
         <div style="text-align:center;padding:14px;background:var(--bg);border-radius:var(--radius-sm);">
-          <div style="font-size:28px;font-weight:800;color:var(--warning);" id="puntosTotal">—</div>
+          <div style="font-size:28px;font-weight:800;color:var(--warning);">{{ puntos_total|default:0 }}</div>
           <div class="text-xs text-muted">Puntos SmartSave</div>
         </div>
       </div>
@@ -75,12 +75,4 @@
   {% endfor %}
 </div>
 
-{% endblock %}
-
-{% block extra_js %}
-<script>
-document.addEventListener('DOMContentLoaded', () => {
-  document.getElementById('puntosTotal').textContent = {{ total_desbloqueados|default:0 }} * 10;
-});
-</script>
 {% endblock %}

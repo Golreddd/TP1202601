@@ -91,7 +91,7 @@
   <div class="stat-card orange">
     <div class="stat-icon">🔥</div>
     <div class="stat-label">Racha Máxima</div>
-    <div class="stat-value">{{ user.racha.racha_maxima|default:0 }} días</div>
+    {% with rm=user.racha.racha_maxima|default:0 %}<div class="stat-value">{{ rm }} día{{ rm|pluralize }}</div>{% endwith %}
     <div class="stat-change">Consecutivos</div>
   </div>
   <div class="stat-card purple">

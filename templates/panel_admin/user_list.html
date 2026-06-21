@@ -50,13 +50,13 @@
           </tr>
         </thead>
         <tbody>
-          {% for u in usuarios %}
+          {% for u in page_obj %}
           <tr>
             <td class="text-muted">{{ u.pk }}</td>
             <td class="font-semi">{{ u.nickname|default:"—" }}</td>
             <td>{{ u.email }}</td>
             <td>
-              <span class="badge {% if u.is_staff %}badge-purple{% else %}badge-blue{% endif %}">
+              <span class="badge {% if u.es_admin %}badge-purple{% else %}badge-blue{% endif %}">
                 {{ u.nombre_rol }}
               </span>
             </td>
@@ -89,6 +89,20 @@
         </tbody>
       </table>
     </div>
+
+    {% if page_obj.paginator.num_pages > 1 %}
+    <div class="flex flex-center justify-between" style="gap:12px;flex-wrap:wrap;padding:16px 18px;border-top:1px solid var(--border);">
+      <div class="text-sm text-muted">Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }} · {{ total_users }} usuarios</div>
+      <div class="flex gap-2">
+        {% if page_obj.has_previous %}
+          <a href="?page={{ page_obj.previous_page_number }}{% if querystring %}&{{ querystring }}{% endif %}" class="btn btn-sm btn-outline">‹ Anterior</a>
+        {% endif %}
+        {% if page_obj.has_next %}
+          <a href="?page={{ page_obj.next_page_number }}{% if querystring %}&{{ querystring }}{% endif %}" class="btn btn-sm btn-outline">Siguiente ›</a>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
   </div>
 </div>
 {% endblock %}

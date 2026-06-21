@@ -6,11 +6,25 @@ JWT:        SIMPLE_JWT  →  clave: SEBASTIANRODRIGO (configurable en .env)
 PostgreSQL: DATABASES   →  DATABASE_URL en producción (Render) o vars individuales en local
 """
 import sys
+import warnings
 from datetime import timedelta
 from pathlib import Path
 
 import dj_database_url
 from decouple import Csv, config
+
+# ──────────────────────────────────────────────────────────────────────────────
+# SILENCIAR WARNING BENIGNO DE XGBOOST AL CARGAR EL MODELO POR PICKLE
+# El artefacto models/xgb_clf_model.pkl reporta versión [3,2,0], idéntica a la
+# instalada (xgboost==3.2.0), por lo que NO hay desajuste real: es solo el aviso
+# precautorio que XGBoost emite al deserializar por pickle (recomienda save_model
+# nativo). No afecta la inferencia. Se filtra de forma dirigida por su mensaje.
+# ──────────────────────────────────────────────────────────────────────────────
+warnings.filterwarnings(
+    'ignore',
+    message=r'(?s).*serialized model.*',
+    category=UserWarning,
+)
 
 # Constantes de mensajes Django (no dependen del app registry)
 from django.contrib.messages import constants as MESSAGE_CONSTANTS

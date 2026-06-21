@@ -112,9 +112,12 @@ class Usuario(AbstractUser):
         # username = nickname si no se especificó otro valor
         if not self.username:
             self.username = self.nickname
-        # Sincroniza is_staff con el rol para compatibilidad con
-        # @staff_member_required y el admin interno de Django
-        if self.rol is not None:
+        # Sincroniza is_staff para @staff_member_required y el admin de Django.
+        # Un SUPERUSUARIO siempre es staff (si no, perdería acceso al panel al
+        # re-guardarse); en su defecto, is_staff sigue al rol.
+        if self.is_superuser:
+            self.is_staff = True
+        elif self.rol is not None:
             self.is_staff = self.rol.es_admin
         elif self.pk is None:
             self.is_staff = False
@@ -124,11 +127,15 @@ class Usuario(AbstractUser):
 
     @property
     def nombre_rol(self):
+        # Superusuario o rol ADMIN → "Administrador" (consistente con el sidebar,
+        # is_staff y @staff_member_required), sin importar el FK rol.
+        if self.es_admin:
+            return 'Administrador'
         return self.rol.get_nombre_display() if self.rol else 'Sin rol'
 
     @property
     def es_admin(self):
-        return self.rol is not None and self.rol.nombre == Rol.ADMIN
+        return self.is_superuser or (self.rol is not None and self.rol.nombre == Rol.ADMIN)
 
     @property
     def perfil_completo(self):

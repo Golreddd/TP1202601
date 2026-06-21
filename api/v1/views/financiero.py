@@ -107,10 +107,12 @@ class DashboardView(APIView):
         resultado = user.resultados_ml.select_related('registro').first()
         if resultado:
             ultimo_ml = {
-                'cluster_label': resultado.cluster_label,
-                'ahorro_actual': resultado.ahorro_actual,
-                'confianza':     resultado.confianza,
-                'fecha':         resultado.creado_en.strftime('%d/%m/%Y'),
+                'clase_predicha': resultado.clase_predicha,
+                'label_predicha': resultado.label_predicha,
+                'prob_ahorra':    resultado.prob_ahorra,
+                'ahorro_actual':  resultado.ahorro_actual,
+                'confianza':      resultado.confianza,
+                'fecha':          resultado.creado_en.strftime('%d/%m/%Y'),
             }
 
         return Response({

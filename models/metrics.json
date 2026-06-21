@@ -1,0 +1,80 @@
+{
+  "modelo": "XGBoost Classifier binario (Déficit / Ahorra)",
+  "clases": {
+    "0": "Déficit",
+    "1": "Ahorra"
+  },
+  "n_features": 19,
+  "features": [
+    "NIVEL_EDUC",
+    "MIEMBROS_HOGAR",
+    "DEPENDE_INFORMAL",
+    "ING_PLANILLA",
+    "ING_INFORMAL",
+    "LOG_ING",
+    "ING_PER_CAPITA",
+    "INFORMAL_SHARE",
+    "PRESION_FINANCIERA",
+    "COMMIT_PER_CAPITA",
+    "GASTO_ALIMENTOS_R",
+    "GASTO_VIVIENDA_SERVICIOS_R",
+    "GASTO_TRANSPORTE_R",
+    "GASTO_SALUD_R",
+    "GASTO_EDUCACION_R",
+    "ESTRATO_SOC",
+    "TIPO_FORMAL",
+    "TIPO_INFORMAL",
+    "TIPO_MIXTO"
+  ],
+  "excluidas_por_fuga": [
+    "GASTO_OTROS_BIENES",
+    "CAPACIDAD_BRUTA",
+    "ING_TOTAL",
+    "montos crudos de gasto",
+    "EDAD"
+  ],
+  "n_total": 9527,
+  "n_train": 6668,
+  "n_valid": 1906,
+  "n_test": 953,
+  "baseline_clase_mayoritaria_acc": 0.5150624540778839,
+  "n_arboles_early_stopping": 451,
+  "best_cv_macro_f1": 0.8283505626007623,
+  "train": {
+    "accuracy": 0.8446310737852429,
+    "precision": 0.8332322619769558,
+    "recall": 0.849721706864564,
+    "f1": 0.8413962033067973,
+    "roc_auc": 0.9309062058666852
+  },
+  "valid": {
+    "accuracy": 0.8310598111227702,
+    "precision": 0.8344444444444444,
+    "recall": 0.8127705627705628,
+    "f1": 0.8234649122807017,
+    "roc_auc": 0.9185115631144143
+  },
+  "test": {
+    "accuracy": 0.8121720881427072,
+    "precision": 0.8056155507559395,
+    "recall": 0.8073593073593074,
+    "f1": 0.8064864864864865,
+    "roc_auc": 0.9020816250958817
+  },
+  "cv_5fold": {
+    "accuracy": 0.8269133252362343,
+    "accuracy_std": 0.007996908055531498,
+    "recall": 0.8296536796536795,
+    "f1": 0.822966884847124,
+    "roc_auc": 0.9134779010346564
+  },
+  "multi_semilla_test": {
+    "accuracy": 0.8295907660020987,
+    "recall": 0.8264069264069264,
+    "f1": 0.8246054844647304,
+    "roc_auc": 0.9135971292794103,
+    "accuracy_std": 0.012301658669257368,
+    "n_seeds": 5
+  },
+  "gap_accuracy_train_test": 0.0325
+}

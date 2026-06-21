@@ -46,20 +46,40 @@ def _llamar_recommend(user_dict: dict, meta_ahorro: float):
     return recommend(user_dict, meta_ahorro)
 
 
+def _orquestar(ref_dict: dict, actual_dict: dict, meta_ahorro: float):
+    """Flujo de recomendaciones del spec (mes de referencia ≠ mes actual):
+
+      • Clasificación + SHAP se calculan sobre el MES DE REFERENCIA elegido.
+      • El plan counterfactual (opciones) se genera sobre el MES ACTUAL.
+
+    Devuelve el dict de recommend(actual) con `clase_actual` y `diagnostico_shap`
+    sustituidos por los del mes de referencia. Si ref_dict es actual_dict, el
+    resultado es equivalente a recommend() directo (caso de un solo mes).
+    """
+    from src.predict import classify, recommend, shap_explain
+    plan = recommend(actual_dict, meta_ahorro)
+    plan['clase_actual'] = classify(ref_dict)
+    plan['diagnostico_shap'] = shap_explain(ref_dict, top=3)
+    return plan
+
+
 # ── Análisis ML — datos REALES ────────────────────────────────────────────────
 
 class EjecutarMLView(APIView):
     """
     POST /api/v1/recomendaciones/ejecutar/
 
-    Ejecuta el pipeline ML sobre datos de un RegistroMensual existente.
-    El resultado se persiste en recomendaciones_resultadoml (solo escalares).
-    Los planes y SHAP se devuelven en la respuesta pero NO se almacenan
-    (se recomputan cuando el usuario consulta el historial).
+    Flujo (mes de referencia ≠ mes actual):
+      - El usuario elige un mes del historial como REFERENCIA (registro_id):
+        se clasifica con XGBoost y se calcula su SHAP.
+      - El plan counterfactual (opciones) se genera sobre el MES ACTUAL
+        (el RegistroMensual más reciente del usuario).
+    El resultado se persiste en recomendaciones_resultadoml (solo escalares);
+    las opciones y el SHAP se recomputan cuando el usuario consulta el historial.
 
-    Modos de selección del registro:
-      - Sin registro_id → usa el registro más reciente del usuario
-      - Con registro_id → usa ese registro específico
+    Selección de la referencia:
+      - Sin registro_id → referencia = mes actual (más reciente)
+      - Con registro_id → ese mes específico como referencia
     """
     permission_classes = [IsAuthenticated]
 
@@ -83,31 +103,36 @@ class EjecutarMLView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # 2. Obtener registro mensual
+        # 2. Resolver MES DE REFERENCIA (el que se clasifica) y MES ACTUAL (en curso).
+        #    El usuario elige el de referencia; el plan se genera sobre el más reciente.
         registro_id = serializer.validated_data.get('registro_id')
+        mes_actual = RegistroMensual.objects.filter(
+            usuario=user
+        ).order_by('-periodo').first()
+        if not mes_actual:
+            return Response(
+                {'error': 'No tienes registros financieros. Crea uno primero.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         if registro_id:
             try:
-                registro = RegistroMensual.objects.get(id=registro_id, usuario=user)
+                mes_referencia = RegistroMensual.objects.get(id=registro_id, usuario=user)
             except RegistroMensual.DoesNotExist:
                 return Response(
                     {'error': f'Registro #{registro_id} no encontrado.'},
                     status=status.HTTP_404_NOT_FOUND,
                 )
         else:
-            registro = RegistroMensual.objects.filter(
-                usuario=user
-            ).order_by('-periodo').first()
-            if not registro:
-                return Response(
-                    {'error': 'No tienes registros financieros. Crea uno primero.'},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
+            mes_referencia = mes_actual  # sin elección → referencia = mes actual
 
         meta_ahorro = float(serializer.validated_data.get('meta_ahorro', 0.0))
 
-        # 3. Llamar al pipeline ML
+        # 3. Pipeline ML: clasificación + SHAP del mes de referencia; plan del mes actual.
         try:
-            resultado_raw = _llamar_recommend(registro.to_user_dict(), meta_ahorro)
+            resultado_raw = _orquestar(
+                mes_referencia.to_user_dict(), mes_actual.to_user_dict(), meta_ahorro,
+            )
         except FileNotFoundError as exc:
             return Response(
                 {'error': f'Modelo ML no encontrado: {exc}'},
@@ -120,36 +145,41 @@ class EjecutarMLView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-        # 4. Guardar/actualizar MetaMensual si se proporcionó meta
+        # 4. Guardar/actualizar MetaMensual del MES ACTUAL (el del plan) si se dio meta
         meta_obj = None
         if meta_ahorro > 0:
             meta_obj, _ = MetaMensual.objects.update_or_create(
                 usuario=user,
-                periodo=date(registro.periodo.year, registro.periodo.month, 1),
+                periodo=date(mes_actual.periodo.year, mes_actual.periodo.month, 1),
                 defaults={'monto': meta_ahorro},
             )
 
-        # 5. Persistir solo escalares en la BD
+        # 5. Persistir escalares: clasificación (mes referencia) + plan (mes actual)
+        cls = resultado_raw['clase_actual']
         resultado = ResultadoML.objects.create(
             usuario=user,
-            registro=registro,
+            registro=mes_actual,             # mes del plan (ahorro real del mes en curso)
+            mes_referencia=mes_referencia,   # mes clasificado
             meta=meta_obj,
             ahorro_actual=resultado_raw['ahorro_actual'],
             meta_validada=resultado_raw['meta'],
-            gap=resultado_raw['gap'],
-            cluster_id=resultado_raw['cluster_id'],
-            cluster_label=resultado_raw['cluster_label'],
-            confianza=resultado_raw['confianza'],
+            necesita_recortar=resultado_raw['necesita_recortar'],
+            clase_predicha=cls['clase'],
+            label_predicha=cls['label'],
+            prob_ahorra=cls['probabilidad_ahorra'],
+            confianza=cls['confianza'],
+            shap_top_features=resultado_raw.get('diagnostico_shap', []),
         )
 
         # 6. Verificar logros desbloqueables
         verificar_y_otorgar_logros(user, contexto='ml')
 
-        # 7. Respuesta: escalares + planes/SHAP del resultado fresco
+        # 7. Respuesta: escalares + opciones/SHAP del resultado fresco
         data = ResultadoMLSerializer(resultado).data
-        data['planes']          = resultado_raw.get('planes', [])
-        data['shap_top5']       = resultado_raw.get('explicacion_shap', [])
-        data['validacion_meta'] = resultado_raw.get('validacion_meta', {})
+        data['opciones']         = resultado_raw.get('opciones', [])
+        data['diagnostico_shap'] = resultado_raw.get('diagnostico_shap', [])
+        data['mensaje']          = resultado_raw.get('mensaje', '')
+        data['ya_cumple']        = resultado_raw.get('ya_cumple', False)
 
         return Response(data, status=status.HTTP_201_CREATED)
 
@@ -244,20 +274,22 @@ class PronosticoMLView(APIView):
             'gasto_educacion', 'gasto_otros_bienes',
         ])
 
+        cls = resultado_raw['clase_actual']
         return Response({
             'tipo':    'pronostico',
-            'mensaje': 'Análisis hipotético completado. Este resultado NO fue guardado.',
-            # Resultados del ML
-            'ahorro_actual':  resultado_raw['ahorro_actual'],
-            'meta_validada':  resultado_raw['meta'],
-            'gap':            resultado_raw['gap'],
-            'alcanza_meta':   resultado_raw['gap'] <= 0,
-            'cluster_id':     resultado_raw['cluster_id'],
-            'cluster_label':  resultado_raw['cluster_label'],
-            'confianza':      resultado_raw['confianza'],
-            'planes':         resultado_raw.get('planes', []),
-            'shap_top5':      resultado_raw.get('explicacion_shap', []),
-            'validacion_meta': resultado_raw.get('validacion_meta', {}),
+            'mensaje_tipo': 'Análisis hipotético completado. Este resultado NO fue guardado.',
+            # Resultados del ML — clasificación binaria (sin K-Means, sin monto predicho)
+            'ahorro_actual':     resultado_raw['ahorro_actual'],
+            'meta_validada':     resultado_raw['meta'],
+            'necesita_recortar': resultado_raw['necesita_recortar'],
+            'ya_cumple':         resultado_raw['ya_cumple'],
+            'clase_predicha':    cls['clase'],
+            'label_predicha':    cls['label'],
+            'prob_ahorra':       cls['probabilidad_ahorra'],
+            'confianza':         cls['confianza'],
+            'opciones':          resultado_raw.get('opciones', []),
+            'diagnostico_shap':  resultado_raw.get('diagnostico_shap', []),
+            'mensaje':           resultado_raw.get('mensaje', ''),
             # Datos de entrada para referencia del frontend
             'datos_entrada': {
                 'ing_total':    round(ing_total, 2),
@@ -324,17 +356,17 @@ class ResultadoMLDetailView(APIView):
 
         data = ResultadoMLSerializer(resultado).data
 
-        # Recomputar planes y SHAP desde el registro original
+        # Recomputar opciones de recorte y SHAP desde el registro original
         try:
             resultado_recomputado = resultado.recomputar()
-            data['planes']           = resultado_recomputado.get('planes', [])
-            data['shap_top5']        = resultado_recomputado.get('explicacion_shap', [])
-            data['validacion_meta']  = resultado_recomputado.get('validacion_meta', {})
+            data['opciones']         = resultado_recomputado.get('opciones', [])
+            data['diagnostico_shap'] = resultado_recomputado.get('diagnostico_shap', [])
+            data['mensaje']          = resultado_recomputado.get('mensaje', '')
         except Exception as exc:
             logger.warning('No se pudo recomputar resultado ML #%s: %s', pk, exc)
-            data['planes']           = []
-            data['shap_top5']        = []
-            data['validacion_meta']  = {}
+            data['opciones']         = []
+            data['diagnostico_shap'] = []
+            data['mensaje']          = ''
 
         return Response(data)
 
@@ -358,11 +390,11 @@ class ElegirPlanView(APIView):
     Guarda el plan de optimización elegido por el usuario.
     Desactiva cualquier plan previo activo (solo un plan activo a la vez).
 
-    Body: { "resultado_id": int, "nombre_plan": "Conservador|Balanceado|Agresivo" }
+    Body: { "resultado_id": int, "nombre_plan": "Suave|Equilibrado|Decidido" }
     """
     permission_classes = [IsAuthenticated]
 
-    _PLANES_VALIDOS = ['Conservador', 'Balanceado', 'Agresivo']
+    _PLANES_VALIDOS = ['Suave', 'Equilibrado', 'Decidido']
 
     def post(self, request):
         resultado_id = request.data.get('resultado_id')
@@ -396,7 +428,7 @@ class ElegirPlanView(APIView):
             )
 
         plan_data = next(
-            (p for p in detalle.get('planes', []) if p.get('nombre', '').strip() == nombre_plan),
+            (p for p in detalle.get('opciones', []) if p.get('nombre', '').strip() == nombre_plan),
             None,
         )
         if not plan_data:
@@ -405,10 +437,10 @@ class ElegirPlanView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        # Solo los valores optimizados por categoría
+        # Solo los valores optimizados por categoría (dict plano {GASTO_X: valor})
         gastos_sugeridos = {
-            col: round(float(datos['optimizado']), 2)
-            for col, datos in plan_data.get('gastos', {}).items()
+            col: round(float(valor), 2)
+            for col, valor in plan_data.get('gastos_optimizados', {}).items()
         }
 
         # Desactivar plan previo y crear el nuevo
@@ -418,7 +450,7 @@ class ElegirPlanView(APIView):
             usuario=request.user,
             resultado=resultado,
             nombre_plan=nombre_plan,
-            ahorro_proyectado=round(float(plan_data.get('ahorro_predicho', 0)), 2),
+            ahorro_proyectado=round(float(plan_data.get('ahorro_resultante', 0)), 2),
             meta_ahorro=round(float(resultado.meta_validada), 2),
             gastos_sugeridos=gastos_sugeridos,
             activo=True,

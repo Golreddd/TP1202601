@@ -20,10 +20,14 @@ def logros(request):
         for logro in todos_logros
     ]
     total_desbloqueados = len(obtenidos_ids)
+    # Puntos reales = suma del campo `puntos` de los logros obtenidos
+    # (NO count*10: cada logro vale distinto, de 10 a 200).
+    puntos_total = sum(l.puntos for l in todos_logros if l.id in obtenidos_ids)
     return render(request, 'gamificacion/logros.html', {
         'logros':              logros_ctx,
         'total_desbloqueados': total_desbloqueados,
         'total_pendientes':    todos_logros.count() - total_desbloqueados,
+        'puntos_total':        puntos_total,
     })
 
 
@@ -51,14 +55,20 @@ def progreso(request):
     # ── Plan activo y comparación mes a mes ───────────────────────────────────
     plan_activo = PlanSeleccionado.objects.filter(
         usuario=request.user, activo=True
-    ).select_related('resultado').first()
+    ).select_related('resultado__registro').first()
 
     comparacion_plan = []
     if plan_activo:
-        mes_adopcion = plan_activo.fecha_seleccion.date().replace(day=1)
+        # Evaluar el plan desde el MES para el que fue generado (el mes actual del
+        # análisis), no desde antes: un mes que ya transcurrió no pudo seguir un plan
+        # que aún no existía. Fallback al mes de adopción si no hay resultado asociado.
+        if plan_activo.resultado_id and plan_activo.resultado.registro_id:
+            mes_inicio = plan_activo.resultado.registro.periodo.replace(day=1)
+        else:
+            mes_inicio = plan_activo.fecha_seleccion.date().replace(day=1)
         regs_post = RegistroMensual.objects.filter(
             usuario=request.user,
-            periodo__gte=mes_adopcion,
+            periodo__gte=mes_inicio,
         ).order_by('periodo')[:6]
 
         for reg in regs_post:

@@ -65,13 +65,15 @@ class ResultadoMLSerializer(serializers.ModelSerializer):
         model  = ResultadoML
         fields = [
             'id',
-            'ahorro_actual', 'meta_validada', 'gap', 'alcanza_meta',
-            'cluster_id', 'cluster_label', 'confianza',
+            'ahorro_actual', 'meta_validada', 'necesita_recortar', 'alcanza_meta',
+            'clase_predicha', 'label_predicha', 'prob_ahorra', 'confianza',
+            'shap_top_features',
             'periodo_registro', 'creado_en',
         ]
         read_only_fields = [
-            'id', 'ahorro_actual', 'meta_validada', 'gap', 'alcanza_meta',
-            'cluster_id', 'cluster_label', 'confianza',
+            'id', 'ahorro_actual', 'meta_validada', 'necesita_recortar', 'alcanza_meta',
+            'clase_predicha', 'label_predicha', 'prob_ahorra', 'confianza',
+            'shap_top_features',
             'periodo_registro', 'creado_en',
         ]
 
@@ -83,16 +85,16 @@ class ResultadoMLSerializer(serializers.ModelSerializer):
 
 class ResultadoMLDetalleSerializer(ResultadoMLSerializer):
     """
-    Serializer extendido — incluye planes y SHAP recomputados.
+    Serializer extendido — incluye opciones (recortes) y SHAP recomputados.
     Usado en GET /api/v1/recomendaciones/historial/<id>/
-    Los campos planes/shap_top5/validacion_meta se inyectan desde la view.
+    Los campos opciones/diagnostico_shap/mensaje se inyectan desde la view.
     """
-    planes          = serializers.ListField(default=list, read_only=True)
-    shap_top5       = serializers.ListField(default=list, read_only=True)
-    validacion_meta = serializers.DictField(default=dict, read_only=True)
+    opciones         = serializers.ListField(default=list, read_only=True)
+    diagnostico_shap = serializers.ListField(default=list, read_only=True)
+    mensaje          = serializers.CharField(default='', read_only=True)
 
     class Meta(ResultadoMLSerializer.Meta):
-        fields = ResultadoMLSerializer.Meta.fields + ['planes', 'shap_top5', 'validacion_meta']
+        fields = ResultadoMLSerializer.Meta.fields + ['opciones', 'diagnostico_shap', 'mensaje']
 
 
 # ── Input para /ejecutar/ ─────────────────────────────────────────────────────
@@ -109,7 +111,9 @@ class EjecutarMLSerializer(serializers.Serializer):
     """
     registro_id = serializers.IntegerField(
         required=False,
-        help_text='ID del RegistroMensual a analizar. Omitir para usar el más reciente.',
+        help_text='ID del RegistroMensual usado como MES DE REFERENCIA (se clasifica). '
+                  'El plan se genera sobre el mes actual (más reciente). '
+                  'Omitir para usar el mes actual también como referencia.',
     )
     meta_ahorro = serializers.FloatField(
         default=0.0,

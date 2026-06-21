@@ -36,7 +36,10 @@
 
 <!-- Tabla de registros -->
 <div class="card">
-  <div class="card-header mb-4"><div class="card-title">Detalle por Período</div></div>
+  <div class="card-header mb-4">
+    <div class="card-title">Detalle por Período <span class="text-sm text-muted">({{ total_registros }} en total)</span></div>
+    <div class="text-sm text-muted" style="margin-top:4px;">Los gráficos muestran tus últimos {{ n_meses }} meses; la tabla, todos tus períodos.</div>
+  </div>
   <div class="card-body" style="padding-top:0;">
     <div class="table-wrap">
       <table>
@@ -50,7 +53,7 @@
           </tr>
         </thead>
         <tbody>
-          {% for r in registros %}
+          {% for r in page_obj %}
           <tr>
             <td class="font-semi">{{ r.periodo|date:"M Y"|capfirst }}</td>
             <td class="text-success">S/ {{ r.ing_total|floatformat:0 }}</td>
@@ -68,6 +71,20 @@
         </tbody>
       </table>
     </div>
+
+    {% if page_obj.paginator.num_pages > 1 %}
+    <div class="flex flex-center justify-between mt-4" style="gap:12px;flex-wrap:wrap;">
+      <div class="text-sm text-muted">Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</div>
+      <div class="flex gap-2">
+        {% if page_obj.has_previous %}
+          <a href="?meses={{ n_meses }}&page={{ page_obj.previous_page_number }}" class="btn btn-sm btn-outline">‹ Anterior</a>
+        {% endif %}
+        {% if page_obj.has_next %}
+          <a href="?meses={{ n_meses }}&page={{ page_obj.next_page_number }}" class="btn btn-sm btn-outline">Siguiente ›</a>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
   </div>
 </div>
 

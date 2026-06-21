@@ -1,15 +1,14 @@
 {
-  "n_estimators": 412,
-  "max_depth": 6,
-  "learning_rate": 0.1019989806358775,
-  "subsample": 0.6480999515380199,
-  "colsample_bytree": 0.7636151585812957,
-  "min_child_weight": 4,
-  "gamma": 0.1619647011455645,
-  "reg_alpha": 0.23546218682700595,
-  "reg_lambda": 0.5700233551080657,
-  "random_state": 42,
-  "tree_method": "hist",
-  "verbosity": 0,
-  "best_iteration": 326
+  "max_depth": 3,
+  "learning_rate": 0.0217837403437724,
+  "min_child_weight": 2,
+  "reg_alpha": 1.5649941056840992,
+  "reg_lambda": 2.10400127981316,
+  "subsample": 0.7533259988620896,
+  "colsample_bytree": 0.9283575921342293,
+  "gamma": 0.23403114108369394,
+  "n_estimators_max": 1500,
+  "n_arboles_usados": 451,
+  "objective": "binary:logistic",
+  "early_stopping_rounds": 50
 }

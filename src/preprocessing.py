@@ -1,177 +1,124 @@
+# -*- coding: utf-8 -*-
 """
-Módulo de preprocesamiento para el sistema de recomendación de ahorro financiero.
-Contiene funciones para carga, limpieza e ingeniería de características.
+Preprocesamiento de SmartSave — pipeline ÚNICO de clasificación binaria.
+
+Tarea: clasificar la capacidad de ahorro del mes en  0 = Déficit (ahorro < 0)  o
+1 = Ahorra (ahorro >= 0), a partir de features HONESTAS (sin fuga de la identidad
+contable `ahorro = ingreso − gasto`).
+
+Control de fuga (núcleo del diseño): el objetivo es la resta ingreso − gasto, así que
+se EXCLUYEN del modelo todas las variables que la reconstruyen:
+  - ING_TOTAL y CAPACIDAD_BRUTA (corr > 0.7 con el ahorro).
+  - los montos CRUDOS de gasto (entran solo como RATIO % del ingreso).
+  - GASTO_OTROS_BIENES + gastos discrecionales (vestido, comunicaciones): son la
+    palanca de la recomendación; además completarían la identidad.
+  - EDAD (sin señal en población 18-30).
+Se MANTIENEN: demografía (educación, miembros, estrato, tipo de ingreso) + ingresos
++ gastos COMPROMETIDOS solo como ratio. Resultado: 19 features referenciales honestas.
 """
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 from scipy.stats.mstats import winsorize
 
+GASTO_COLS = ["GASTO_ALIMENTOS", "GASTO_VESTIDO", "GASTO_VIVIENDA_SERVICIOS", "GASTO_SALUD",
+              "GASTO_TRANSPORTE", "GASTO_COMUNICACIONES", "GASTO_EDUCACION", "GASTO_OTROS_BIENES"]
+# Gastos COMPROMETIDOS (relativamente fijos): entran como ratio al modelo.
+COMMITTED = ["GASTO_ALIMENTOS", "GASTO_VIVIENDA_SERVICIOS", "GASTO_TRANSPORTE", "GASTO_SALUD", "GASTO_EDUCACION"]
+# Gastos DISCRECIONALES: palanca de la recomendación -> NUNCA son input del modelo.
+DISCRETIONARY = ["GASTO_VESTIDO", "GASTO_COMUNICACIONES", "GASTO_OTROS_BIENES"]
+ESENCIAL = ["GASTO_ALIMENTOS", "GASTO_VIVIENDA_SERVICIOS", "GASTO_TRANSPORTE"]
+INGRESO_COLS = ["ING_PLANILLA", "ING_INFORMAL"]
+DEDUP_COLS = INGRESO_COLS + GASTO_COLS
 
-GASTO_COLS = [
-    "GASTO_ALIMENTOS",
-    "GASTO_VESTIDO",
-    "GASTO_VIVIENDA_SERVICIOS",
-    "GASTO_SALUD",
-    "GASTO_TRANSPORTE",
-    "GASTO_COMUNICACIONES",
-    "GASTO_EDUCACION",
-    "GASTO_OTROS_BIENES",
-]
-
-
-def _remove_iqr_outliers(df: pd.DataFrame, cols: list, factor: float = 3.0) -> pd.DataFrame:
-    """Elimina filas con valores atípicos según el método IQR con un factor dado."""
-    mask = pd.Series([True] * len(df), index=df.index)
-    for col in cols:
-        q1 = df[col].quantile(0.25)
-        q3 = df[col].quantile(0.75)
-        iqr = q3 - q1
-        lower = q1 - factor * iqr
-        upper = q3 + factor * iqr
-        mask &= (df[col] >= lower) & (df[col] <= upper)
-    return df[mask].reset_index(drop=True)
+CLASS_LABELS = {0: "Déficit", 1: "Ahorra"}
 
 
-def load_and_clean(path: str) -> pd.DataFrame:
-    """
-    Carga el CSV, aplica winsorización a TARGET_AHORRO, elimina filas con
-    ingreso total <= 0 y detecta/elimina outliers con IQR factor 3.0.
-
-    Parámetros
-    ----------
-    path : str
-        Ruta al archivo CSV del dataset.
-
-    Retorna
-    -------
-    pd.DataFrame
-        Dataset limpio con índice reiniciado.
-    """
-    df = pd.read_csv(path)
-
-    # Winsorización al 1% en ambas colas sobre TARGET_AHORRO
-    df["TARGET_AHORRO"] = winsorize(df["TARGET_AHORRO"], limits=[0.01, 0.01]).data
-
-    # Eliminar filas donde el ingreso total es <= 0
+def clean_dataset(path: str, iqr_factor: float = 2.5, sep: str = ",",
+                  dedup_cols=None, verbose: bool = False) -> pd.DataFrame:
+    """Limpieza: ingreso>0 + dedup ingresos+gastos + winsorización 1% + IQR(factor) en target y gastos."""
+    df = pd.read_csv(path, sep=sep)
+    n0 = len(df)
     df = df[df["ING_PLANILLA"] + df["ING_INFORMAL"] > 0].reset_index(drop=True)
-
-    # Eliminar outliers con IQR factor 3.0 sobre TARGET_AHORRO y columnas GASTO
-    outlier_cols = ["TARGET_AHORRO"] + GASTO_COLS
-    df = _remove_iqr_outliers(df, outlier_cols, factor=3.0)
-
+    n_ing = len(df)
+    df = df.drop_duplicates(subset=(dedup_cols or DEDUP_COLS)).reset_index(drop=True)
+    n_dd = len(df)
+    df["TARGET_AHORRO"] = winsorize(df["TARGET_AHORRO"], limits=[0.01, 0.01]).data
+    mask = pd.Series(True, index=df.index)
+    for c in ["TARGET_AHORRO"] + GASTO_COLS:
+        q1, q3 = df[c].quantile(0.25), df[c].quantile(0.75)
+        iqr = q3 - q1
+        mask &= (df[c] >= q1 - iqr_factor * iqr) & (df[c] <= q3 + iqr_factor * iqr)
+    df = df[mask].reset_index(drop=True)
+    if verbose:
+        print(f"crudo={n0} | ingreso>0={n_ing} | sin duplicados={n_dd} | tras IQR(f={iqr_factor})={len(df)}")
     return df
 
 
-def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Crea características derivadas para los modelos de clustering y regresión.
-
-    Características generadas:
-    - ING_TOTAL, GASTO_TOTAL, RATIO_AHORRO, RATIO_GASTO_ING
-    - DEPENDE_INFORMAL, GASTO_PER_CAPITA
-    - GASTO_ESENCIAL, GASTO_DISCRECIONAL
-    - PRESION_FINANCIERA, CAPACIDAD_BRUTA
-
-    Parámetros
-    ----------
-    df : pd.DataFrame
-        DataFrame con las columnas originales del dataset.
-
-    Retorna
-    -------
-    pd.DataFrame
-        DataFrame con las nuevas columnas añadidas.
-    """
+def add_features(df: pd.DataFrame) -> pd.DataFrame:
+    """Crea las features honestas (ratios % ingreso, log, per cápita) + one-hot de TIPO_INGRESO."""
     df = df.copy()
-
     df["ING_TOTAL"] = df["ING_PLANILLA"] + df["ING_INFORMAL"]
+    df["GASTO_ESENCIAL"] = df[ESENCIAL].sum(axis=1)
+    # Derivadas solo para EDA / identidad (NUNCA son features del modelo: referential_features no las lista).
     df["GASTO_TOTAL"] = df[GASTO_COLS].sum(axis=1)
-
-    # Evitar división por cero (no debería ocurrir tras load_and_clean)
-    safe_ing = df["ING_TOTAL"].replace(0, np.nan)
-
-    df["RATIO_AHORRO"] = df["TARGET_AHORRO"] / safe_ing
-    df["RATIO_GASTO_ING"] = df["GASTO_TOTAL"] / safe_ing
-    df["DEPENDE_INFORMAL"] = (df["ING_INFORMAL"] > df["ING_PLANILLA"]).astype(int)
-    df["GASTO_PER_CAPITA"] = df["GASTO_TOTAL"] / df["MIEMBROS_HOGAR"].replace(0, 1)
-
-    df["GASTO_ESENCIAL"] = (
-        df["GASTO_ALIMENTOS"]
-        + df["GASTO_VIVIENDA_SERVICIOS"]
-        + df["GASTO_TRANSPORTE"]
-    )
-    df["GASTO_DISCRECIONAL"] = (
-        df["GASTO_VESTIDO"]
-        + df["GASTO_OTROS_BIENES"]
-        + df["GASTO_COMUNICACIONES"]
-    )
-
-    df["PRESION_FINANCIERA"] = df["GASTO_ESENCIAL"] / safe_ing
     df["CAPACIDAD_BRUTA"] = df["ING_TOTAL"] - df["GASTO_ESENCIAL"]
-
-    # Rellenar NaN producidos por divisiones (raro tras filtro de ingreso)
-    df = df.fillna(0)
-
+    df["PRESION_FINANCIERA"] = df["GASTO_ESENCIAL"] / (df["ING_TOTAL"] + 1e-6)
+    df["ING_PER_CAPITA"] = df["ING_TOTAL"] / df["MIEMBROS_HOGAR"].clip(lower=1)
+    df["COMMIT_PER_CAPITA"] = df[COMMITTED].sum(axis=1) / df["MIEMBROS_HOGAR"].clip(lower=1)
+    df["DEPENDE_INFORMAL"] = (df["ING_INFORMAL"] > df["ING_PLANILLA"]).astype(int)
+    df["INFORMAL_SHARE"] = df["ING_INFORMAL"] / (df["ING_TOTAL"] + 1e-6)
+    df["LOG_ING"] = np.log1p(df["ING_TOTAL"])
+    for c in COMMITTED:
+        df[c + "_R"] = df[c] / (df["ING_TOTAL"] + 1e-6)
+    if "TIPO_INGRESO" in df.columns:
+        df = pd.get_dummies(df, columns=["TIPO_INGRESO"], prefix="TIPO")
     return df
 
 
-def get_feature_sets() -> dict:
+def referential_features(df: pd.DataFrame) -> list:
+    """Las 19 features honestas presentes en df (sin variables de resta ni discrecionales)."""
+    feats = ["NIVEL_EDUC", "MIEMBROS_HOGAR", "DEPENDE_INFORMAL",
+             "ING_PLANILLA", "ING_INFORMAL", "LOG_ING", "ING_PER_CAPITA", "INFORMAL_SHARE",
+             "PRESION_FINANCIERA", "COMMIT_PER_CAPITA"]
+    feats += [c + "_R" for c in COMMITTED]
+    if "ESTRATO_SOC" in df.columns:
+        feats.append("ESTRATO_SOC")
+    feats += [c for c in df.columns if c.startswith("TIPO_")]
+    return [f for f in feats if f in df.columns]
+
+
+def binary_target(df: pd.DataFrame) -> np.ndarray:
+    """0 = Déficit (ahorro < 0), 1 = Ahorra (ahorro >= 0)."""
+    return (df["TARGET_AHORRO"].values >= 0).astype(int)
+
+
+# --------------------------------------------------------------------------- #
+# Utilidades de inferencia (1 registro de usuario)
+# --------------------------------------------------------------------------- #
+def ing_total(user: dict) -> float:
+    return float(user.get("ING_PLANILLA", 0)) + float(user.get("ING_INFORMAL", 0))
+
+
+def gasto_total(user: dict) -> float:
+    return sum(float(user.get(c, 0)) for c in GASTO_COLS)
+
+
+def ahorro_identidad(user: dict) -> float:
+    """Ahorro real exacto = ingreso total − gasto total (identidad contable)."""
+    return ing_total(user) - gasto_total(user)
+
+
+def build_feature_row(user: dict, features: list) -> pd.DataFrame:
     """
-    Retorna los conjuntos de características usados por cada modelo.
-
-    Retorna
-    -------
-    dict con claves:
-        - kmeans_features: columnas para K-Means clustering
-        - xgb_features: columnas para XGBoost (incluye CLUSTER)
-        - gasto_cols: columnas de gasto originales
+    Construye un DataFrame de 1 fila con EXACTAMENTE las columnas `features` (el orden
+    con que se entrenó el modelo), derivadas desde el input crudo del usuario. Las
+    one-hot `TIPO_*` y `ESTRATO_SOC` ausentes se rellenan con 0.
     """
-    kmeans_features = [
-        "ING_TOTAL",
-        "GASTO_TOTAL",
-        "RATIO_AHORRO",
-        "RATIO_GASTO_ING",
-        "DEPENDE_INFORMAL",
-        "GASTO_PER_CAPITA",
-        "GASTO_ESENCIAL",
-        "GASTO_DISCRECIONAL",
-        "PRESION_FINANCIERA",
-        "CAPACIDAD_BRUTA",
-        "EDAD",
-        "NIVEL_EDUC",
-        "MIEMBROS_HOGAR",
-    ]
-
-    xgb_features = [
-        "EDAD",
-        "NIVEL_EDUC",
-        "MIEMBROS_HOGAR",
-        "ING_PLANILLA",
-        "ING_INFORMAL",
-        "ING_TOTAL",
-        "GASTO_TOTAL",
-        "RATIO_AHORRO",
-        "RATIO_GASTO_ING",
-        "DEPENDE_INFORMAL",
-        "GASTO_PER_CAPITA",
-        "GASTO_ESENCIAL",
-        "GASTO_DISCRECIONAL",
-        "PRESION_FINANCIERA",
-        "CAPACIDAD_BRUTA",
-        "GASTO_ALIMENTOS",
-        "GASTO_VESTIDO",
-        "GASTO_VIVIENDA_SERVICIOS",
-        "GASTO_SALUD",
-        "GASTO_TRANSPORTE",
-        "GASTO_COMUNICACIONES",
-        "GASTO_EDUCACION",
-        "GASTO_OTROS_BIENES",
-        "CLUSTER",
-    ]
-
-    return {
-        "kmeans_features": kmeans_features,
-        "xgb_features": xgb_features,
-        "gasto_cols": GASTO_COLS,
-    }
+    row = dict(user)
+    row.setdefault("TARGET_AHORRO", 0.0)
+    df = add_features(pd.DataFrame([row]))
+    for f in features:
+        if f not in df.columns:
+            df[f] = 0.0
+    return df[features].astype(float)

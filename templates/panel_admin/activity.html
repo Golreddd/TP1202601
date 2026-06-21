@@ -24,7 +24,7 @@
           </tr>
         </thead>
         <tbody>
-          {% for log in logs %}
+          {% for log in page_obj %}
           <tr>
             <td class="text-muted text-xs">{{ log.fecha|date:"d/m/Y H:i" }}</td>
             <td class="font-semi">{% if log.admin %}{{ log.admin.nickname|default:log.admin.email }}{% else %}Sistema{% endif %}</td>
@@ -48,6 +48,20 @@
         </tbody>
       </table>
     </div>
+
+    {% if page_obj.paginator.num_pages > 1 %}
+    <div class="flex flex-center justify-between" style="gap:12px;flex-wrap:wrap;padding:16px 18px;border-top:1px solid var(--border);">
+      <div class="text-sm text-muted">Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }} · {{ total_logs }} registros</div>
+      <div class="flex gap-2">
+        {% if page_obj.has_previous %}
+          <a href="?page={{ page_obj.previous_page_number }}" class="btn btn-sm btn-outline">‹ Anterior</a>
+        {% endif %}
+        {% if page_obj.has_next %}
+          <a href="?page={{ page_obj.next_page_number }}" class="btn btn-sm btn-outline">Siguiente ›</a>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
   </div>
 </div>
 {% endblock %}

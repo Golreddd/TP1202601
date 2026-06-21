@@ -25,10 +25,12 @@
 <!-- Panel de ejecución via API -->
 <div class="ml-setup mb-6">
   <h2>Ejecutar Nuevo Análisis ML</h2>
-  <p>Elige el registro mensual con el que deseas ejecutar el análisis y tu meta de ahorro.</p>
+  <p>Elige el <strong>mes de referencia</strong> que se clasificará (Ahorra / Déficit) y tu meta de ahorro.
+     El <strong>plan de recortes</strong> se genera siempre sobre tu <strong>mes actual</strong> (el más reciente).</p>
+  <div id="mesActualNota" style="font-size:12px;color:#cbd5e1;margin:-4px 0 12px;"></div>
   <div class="ml-form" style="flex-wrap:wrap;">
     <div>
-      <label style="display:block;color:#94a3b8;font-size:12px;font-weight:600;margin-bottom:6px;">Registro mensual</label>
+      <label style="display:block;color:#94a3b8;font-size:12px;font-weight:600;margin-bottom:6px;">Mes de referencia (se clasifica)</label>
       <select id="registroSel" class="form-input" onchange="renderResumenRegistro()" style="min-width:420px;background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.2);color:#fff;">
       </select>
     </div>
@@ -51,26 +53,29 @@
 {% include "recomendaciones/_resultado_ml.html" %}
 
 <!-- Historial -->
-{% if resultados|length > 1 %}
+{% if total_analisis > 1 %}
 <div class="card">
   <div class="card-header mb-4">
-    <div class="card-title">📅 Historial de Análisis</div>
-    <div class="text-sm text-muted" style="margin-top:4px;">Haz clic en un análisis para ver sus recomendaciones completas (sin volver a ejecutar el modelo).</div>
+    <div class="card-title">📅 Historial de Análisis <span class="text-sm text-muted">({{ total_analisis }} en total)</span></div>
+    <div class="text-sm text-muted" style="margin-top:4px;">
+      La <strong>clasificación</strong> corresponde al <strong>mes de referencia</strong>; el ahorro, la meta y el plan, al <strong>mes del plan</strong> (tu mes actual). Haz clic en un análisis para ver sus recomendaciones completas.
+    </div>
   </div>
   <div class="card-body" style="padding-top:0;">
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Fecha</th><th>Período</th><th>Cluster</th><th>Ahorro Predicho</th><th>Meta</th><th>Gap</th><th></th></tr></thead>
+        <thead><tr><th>Fecha</th><th>Referencia</th><th>Clasificación</th><th>Mes del plan</th><th>Ahorro Real</th><th>Meta</th><th>Falta Recortar</th><th></th></tr></thead>
         <tbody>
-          {% for r in resultados %}
+          {% for r in page_obj %}
           <tr>
             <td>{{ r.creado_en|date:"d/m/Y" }}</td>
+            <td>{% if r.mes_referencia %}{{ r.mes_referencia.periodo|date:"F Y"|capfirst }}{% else %}{{ r.registro.periodo|date:"F Y"|capfirst }}{% endif %}</td>
+            <td><span class="badge {% if r.clase_predicha %}badge-green{% else %}badge-red{% endif %}">{{ r.label_predicha }}</span></td>
             <td>{{ r.registro.periodo|date:"F Y"|capfirst }}</td>
-            <td><span class="badge badge-blue">{{ r.cluster_label }}</span></td>
-            <td class="text-success font-bold">S/ {{ r.ahorro_actual|floatformat:0 }}</td>
+            <td class="{% if r.ahorro_actual >= 0 %}text-success{% else %}text-danger{% endif %} font-bold">S/ {{ r.ahorro_actual|floatformat:0 }}</td>
             <td>S/ {{ r.meta_validada|floatformat:0 }}</td>
             <td class="{% if r.alcanza_meta %}text-success{% else %}text-danger{% endif %}">
-              S/ {{ r.gap|floatformat:0 }}
+              S/ {{ r.necesita_recortar|floatformat:0 }}
             </td>
             <td>
               <a href="{% url 'recomendaciones:historial_detalle' r.id %}" class="btn btn-sm btn-outline">Ver →</a>
@@ -80,6 +85,24 @@
         </tbody>
       </table>
     </div>
+
+    {% if page_obj.paginator.num_pages > 1 %}
+    <div class="flex flex-center justify-between mt-4" style="gap:12px;flex-wrap:wrap;">
+      <div class="text-sm text-muted">
+        Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}
+      </div>
+      <div class="flex gap-2">
+        {% if page_obj.has_previous %}
+          <a href="?page=1" class="btn btn-sm btn-outline">« Primera</a>
+          <a href="?page={{ page_obj.previous_page_number }}" class="btn btn-sm btn-outline">‹ Anterior</a>
+        {% endif %}
+        {% if page_obj.has_next %}
+          <a href="?page={{ page_obj.next_page_number }}" class="btn btn-sm btn-outline">Siguiente ›</a>
+          <a href="?page={{ page_obj.paginator.num_pages }}" class="btn btn-sm btn-outline">Última »</a>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
   </div>
 </div>
 {% endif %}
@@ -100,6 +123,8 @@
 <script>
 // ── Registros disponibles para el análisis ────────────────────────────────────
 const _registros = {{ registros_js|safe }};
+// Mes de referencia del último análisis: el selector lo recuerda tras ejecutar.
+const _ultimaRef = {{ ultima_ref_id|default:"null" }};
 
 function _fmtSoles(n) {
   return 'S/ ' + Number(n).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -122,6 +147,19 @@ function poblarSelectorRegistros() {
     // sean legibles (el select cerrado usa texto blanco sobre fondo oscuro).
     return `<option value="${r.id}" style="color:#1e293b;background:#fff;">${txt}</option>`;
   }).join('');
+
+  // El mes actual = el más reciente (los registros vienen ordenados por -periodo).
+  const nota = document.getElementById('mesActualNota');
+  if (nota && _registros.length) {
+    const ma = _registros[0];
+    nota.innerHTML = `📌 Tu <strong>mes actual</strong> (para el plan de recortes) es <strong>${ma.mes} ${ma.anio}</strong>.`;
+  }
+
+  // Recordar el mes de referencia del último análisis (si sigue existiendo),
+  // para que el formulario no vuelva al más reciente tras ejecutar.
+  if (_ultimaRef && _registros.some(r => String(r.id) === String(_ultimaRef))) {
+    sel.value = String(_ultimaRef);
+  }
   renderResumenRegistro();
 }
 

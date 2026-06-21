@@ -319,8 +319,8 @@ class AdminMetricasView(APIView):
             creado_en__gte=hace_30_dias
         ).count()
 
-        clusters = list(
-            ResultadoML.objects.values('cluster_label')
+        clases = list(
+            ResultadoML.objects.values('label_predicha')
             .annotate(total=Count('id'))
             .order_by('-total')
         )
@@ -346,8 +346,8 @@ class AdminMetricasView(APIView):
                 'ultimo_mes': registros_mes,
             },
             'analisis_ml': {
-                'total':                  total_analisis,
-                'ultimo_mes':             analisis_mes,
-                'distribucion_clusters':  clusters,
+                'total':                 total_analisis,
+                'ultimo_mes':            analisis_mes,
+                'distribucion_clases':   clases,
             },
         })

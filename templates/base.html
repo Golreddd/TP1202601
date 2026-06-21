@@ -124,7 +124,7 @@
       <div class="topbar-actions">
         {% with dias=user.racha.dias_consecutivos|default:0 %}
           {% if dias > 0 %}
-            <span class="streak-badge" title="Racha activa">🔥 {{ dias }} días</span>
+            <span class="streak-badge" title="Racha activa">🔥 {{ dias }} día{{ dias|pluralize }}</span>
           {% endif %}
         {% endwith %}
         <a href="{% url 'accounts:profile' %}" class="icon-btn" title="Configuración">⚙️</a>

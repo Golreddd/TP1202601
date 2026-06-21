@@ -86,12 +86,14 @@ class MetaLargoPlazo(models.Model):
 
 class ResultadoML(models.Model):
     """
-    Resultado escalares de cada ejecución de recommend() en src/predict.py.
+    Resultados escalares de cada ejecución de recommend() en src/predict.py.
 
-    Se guardan solo los valores escalares:
-      ahorro_actual, meta_validada, gap, cluster_id, cluster_label, confianza.
+    Modelo nuevo: XGBoost Classifier binario (Déficit/Ahorra). Ya NO hay
+    K-Means ni montos predichos. Se guardan solo los escalares:
+      ahorro_actual (identidad contable real), meta_validada, necesita_recortar,
+      clase_predicha, label_predicha, prob_ahorra, confianza, shap_top_features.
 
-    Los planes de acción (conservador/balanceado/agresivo) y el top 5 SHAP
+    Las opciones de recorte (Suave/Equilibrado/Decidido) y el SHAP completo
     se recomputan en tiempo real cuando el usuario los consulta, pasando el
     RegistroMensual original a recommend() de nuevo.
     Esto mantiene la BD ligera y permite actualizar la lógica de predict.py
@@ -107,6 +109,15 @@ class ResultadoML(models.Model):
         on_delete=models.CASCADE,
         related_name='resultados_ml',
     )
+    # Mes elegido como referencia para clasificar. En el MVP de un solo mes
+    # coincide con `registro` (mismo período analizado).
+    mes_referencia = models.ForeignKey(
+        'financiero.RegistroMensual',
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='resultados_referencia',
+        verbose_name='Mes de referencia',
+    )
     meta = models.ForeignKey(
         MetaMensual,
         on_delete=models.SET_NULL,
@@ -114,12 +125,16 @@ class ResultadoML(models.Model):
     )
 
     # ── Salidas escalares de recommend() ─────────────────────────────────────
-    ahorro_actual  = models.FloatField(verbose_name='Ahorro predicho (S/)')
-    meta_validada  = models.FloatField(verbose_name='Meta validada (S/)')
-    gap            = models.FloatField(verbose_name='Gap meta - ahorro (S/)')
-    cluster_id     = models.IntegerField(verbose_name='ID cluster K-Means')
-    cluster_label  = models.CharField(max_length=150, verbose_name='Etiqueta cluster')
-    confianza      = models.CharField(max_length=250, verbose_name='Nivel de confianza')
+    ahorro_actual     = models.FloatField(verbose_name='Ahorro real (S/)')
+    meta_validada     = models.FloatField(verbose_name='Meta validada (S/)')
+    necesita_recortar = models.FloatField(default=0.0, verbose_name='Falta recortar (S/)')
+
+    # ── Clasificación binaria (XGBoost Classifier) ───────────────────────────
+    clase_predicha    = models.IntegerField(default=0, verbose_name='Clase (0=Déficit, 1=Ahorra)')
+    label_predicha    = models.CharField(max_length=20, default='', verbose_name='Etiqueta clase')
+    prob_ahorra       = models.FloatField(default=0.0, verbose_name='Probabilidad de Ahorrar')
+    confianza         = models.CharField(max_length=250, verbose_name='Nivel de confianza')
+    shap_top_features = models.JSONField(default=list, verbose_name='Top features SHAP')
 
     creado_en = models.DateTimeField(auto_now_add=True)
 
@@ -130,8 +145,8 @@ class ResultadoML(models.Model):
         indexes = [
             # Historial / dashboard: filtra por usuario y ordena por fecha.
             models.Index(fields=['usuario', '-creado_en'], name='idx_resml_user_fecha'),
-            # Métricas admin: distribución por cluster.
-            models.Index(fields=['cluster_label'], name='idx_resml_cluster'),
+            # Métricas admin: distribución por clase (Ahorra/Déficit).
+            models.Index(fields=['label_predicha'], name='idx_resml_clase'),
         ]
 
     def __str__(self):
@@ -139,17 +154,24 @@ class ResultadoML(models.Model):
 
     @property
     def alcanza_meta(self):
-        return self.gap <= 0
+        return self.necesita_recortar <= 0
 
     def recomputar(self):
         """
-        Llama a recommend() con los datos originales del registro y devuelve
-        el dict completo con planes y SHAP. Usar en la vista de detalle.
+        Reproduce el análisis con la separación mes de referencia ≠ mes actual:
+          • clasificación + SHAP desde el MES DE REFERENCIA (mes_referencia),
+          • opciones (plan counterfactual) desde el MES ACTUAL (registro).
+        Devuelve el dict de recommend(mes_actual) con `clase_actual` y
+        `diagnostico_shap` sustituidos por los del mes de referencia.
         """
-        from src.predict import recommend
-        user_dict = self.registro.to_user_dict()
+        from src.predict import classify, recommend, shap_explain
         meta_ahorro = float(self.meta.monto) if self.meta else 0.0
-        return recommend(user_dict, meta_ahorro)
+        plan = recommend(self.registro.to_user_dict(), meta_ahorro)  # mes actual
+        ref = self.mes_referencia or self.registro
+        ref_dict = ref.to_user_dict()
+        plan['clase_actual'] = classify(ref_dict)               # mes de referencia
+        plan['diagnostico_shap'] = shap_explain(ref_dict, top=3)
+        return plan
 
 
 class PlanSeleccionado(models.Model):
@@ -158,9 +180,9 @@ class PlanSeleccionado(models.Model):
     Solo puede haber un plan activo por usuario a la vez.
     """
     PLAN_CHOICES = [
-        ('Conservador', 'Conservador'),
-        ('Balanceado',  'Balanceado'),
-        ('Agresivo',    'Agresivo'),
+        ('Suave',       'Suave'),
+        ('Equilibrado', 'Equilibrado'),
+        ('Decidido',    'Decidido'),
     ]
 
     usuario = models.ForeignKey(
@@ -204,4 +226,4 @@ class PlanSeleccionado(models.Model):
 
     @property
     def icono(self):
-        return {'Conservador': '🌿', 'Balanceado': '⚖️', 'Agresivo': '🚀'}.get(self.nombre_plan, '📋')
+        return {'Suave': '🌿', 'Equilibrado': '⚖️', 'Decidido': '🚀'}.get(self.nombre_plan, '📋')

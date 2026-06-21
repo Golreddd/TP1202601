@@ -32,7 +32,7 @@
       </div>
       <div class="flex justify-between text-sm mb-4">
         <span class="text-muted">Rol</span>
-        <span class="badge {% if usuario.is_staff %}badge-purple{% else %}badge-blue{% endif %}">{{ usuario.nombre_rol }}</span>
+        <span class="badge {% if usuario.es_admin %}badge-purple{% else %}badge-blue{% endif %}">{{ usuario.nombre_rol }}</span>
       </div>
       <div class="flex justify-between text-sm mb-4">
         <span class="text-muted">Ciudad</span>

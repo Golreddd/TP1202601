@@ -93,22 +93,25 @@ def verificar_y_otorgar_logros(usuario, contexto: str = '') -> list:
         if total_ml >= 1 and _otorgar(usuario, 'PRIMER_ML'):
             nuevos.append('PRIMER_ML')
 
-        # Clasificado como "Ahorrador" por K-Means
+        # Clasificado como "Ahorra" (clase 1) por el XGBoost Classifier
         ultimo_ml = usuario.resultados_ml.order_by('-creado_en').first()
         if (ultimo_ml
-                and 'ahorrador' in ultimo_ml.cluster_label.lower()
+                and ultimo_ml.clase_predicha == 1
                 and _otorgar(usuario, 'CLUSTER_AHORRADOR')):
             nuevos.append('CLUSTER_AHORRADOR')
 
     # ── Logros de METAS ───────────────────────────────────────────────────────
+    # 'meta_completada' lo disparan meta_create / meta_update (web) y la API.
     if contexto == 'meta_completada':
         from recomendaciones.models import MetaLargoPlazo
 
-        completadas = MetaLargoPlazo.objects.filter(
-            usuario=usuario,
-            activa=True,
-            monto_actual__gte=F('monto_objetivo'),
-        ).count()
+        metas = MetaLargoPlazo.objects.filter(usuario=usuario, activa=True)
+
+        # PRIMERA_META: por tener al menos una meta de ahorro creada.
+        if metas.exists() and _otorgar(usuario, 'PRIMERA_META'):
+            nuevos.append('PRIMERA_META')
+
+        completadas = metas.filter(monto_actual__gte=F('monto_objetivo')).count()
 
         if completadas >= 1 and _otorgar(usuario, 'META_CUMPLIDA'):
             nuevos.append('META_CUMPLIDA')

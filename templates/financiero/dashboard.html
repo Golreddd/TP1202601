@@ -115,11 +115,11 @@
       {% if ultimo_ml %}
         <div class="insight-card">
           <div class="insight-header">
-            <div class="insight-icon {% if ultimo_ml.alcanza_meta %}green{% else %}orange{% endif %}">🤖</div>
-            <div class="insight-title">Último análisis ML — {{ ultimo_ml.cluster_label }}</div>
+            <div class="insight-icon {% if ultimo_ml.clase_predicha %}green{% else %}orange{% endif %}">🤖</div>
+            <div class="insight-title">Último análisis ML — {{ ultimo_ml.label_predicha }}</div>
           </div>
           <div class="insight-text">
-            Ahorro predicho: <strong>S/ {{ ultimo_ml.ahorro_actual|floatformat:0 }}</strong> ·
+            Ahorro real: <strong>S/ {{ ultimo_ml.ahorro_actual|floatformat:0 }}</strong> ·
             Meta: <strong>S/ {{ ultimo_ml.meta_validada|floatformat:0 }}</strong>
           </div>
         </div>

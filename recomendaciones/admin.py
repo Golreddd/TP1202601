@@ -16,5 +16,6 @@ class MetaLargoPlazoAdmin(admin.ModelAdmin):
 
 @admin.register(ResultadoML)
 class ResultadoMLAdmin(admin.ModelAdmin):
-    list_display = ('usuario', 'cluster_label', 'ahorro_actual', 'gap', 'confianza', 'creado_en')
+    list_display = ('usuario', 'label_predicha', 'prob_ahorra', 'ahorro_actual', 'necesita_recortar', 'confianza', 'creado_en')
+    list_filter = ('label_predicha',)
     readonly_fields = ('creado_en',)
