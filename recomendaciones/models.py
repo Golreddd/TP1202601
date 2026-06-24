@@ -176,9 +176,41 @@ class ResultadoML(models.Model):
         plan = recommend(self.registro.to_user_dict(), meta_ahorro, historial=historial)
         ref = self.mes_referencia or self.registro
         ref_dict = ref.to_user_dict()
-        plan['clase_actual'] = classify(ref_dict)               # mes de referencia
+        cls = classify(ref_dict)                                # mes de referencia
+        plan['clase_actual'] = cls
         plan['diagnostico_shap'] = shap_explain(ref_dict, top=3)
+
+        # Re-sincronizar la fotografía escalar guardada con este recálculo. Las opciones
+        # se recomputan SIEMPRE desde los datos actuales del registro; si el usuario editó
+        # ese mes (o el de referencia) tras guardar el análisis, los escalares almacenados
+        # quedaban obsoletos y contradecían el plan (p. ej. "falta recortar 460" guardado
+        # vs un plan que alcanza la meta recortando 310). Refrescamos para que la vista del
+        # historial sea siempre coherente. meta_validada NO se toca: es la meta que el
+        # usuario fijó, ancla del análisis.
+        self._sincronizar_escalares(plan, cls)
         return plan
+
+    def _sincronizar_escalares(self, plan, cls):
+        """Actualiza (y persiste, solo si cambió) los escalares cacheados del análisis."""
+        nuevos = {
+            'ahorro_actual':     round(float(plan['ahorro_actual']), 2),
+            'necesita_recortar': round(float(plan['necesita_recortar']), 2),
+            'clase_predicha':    int(cls['clase']),
+            'label_predicha':    cls['label'],
+            'prob_ahorra':       round(float(cls['probabilidad_ahorra']), 4),
+            'confianza':         cls['confianza'],
+        }
+
+        def _difiere(actual, nuevo):
+            try:
+                return abs(float(actual) - float(nuevo)) > 0.01
+            except (TypeError, ValueError):
+                return str(actual) != str(nuevo)
+
+        if self.pk and any(_difiere(getattr(self, k), v) for k, v in nuevos.items()):
+            for k, v in nuevos.items():
+                setattr(self, k, v)
+            self.save(update_fields=list(nuevos.keys()))
 
 
 class PlanSeleccionado(models.Model):

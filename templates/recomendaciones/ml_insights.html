@@ -25,12 +25,13 @@
 <!-- Panel de ejecución via API -->
 <div class="ml-setup mb-6">
   <h2>Ejecutar Nuevo Análisis ML</h2>
-  <p>Elige el <strong>mes de referencia</strong> que se clasificará (Ahorra / Déficit) y tu meta de ahorro.
-     El <strong>plan de recortes</strong> se genera siempre sobre tu <strong>mes actual</strong> (el más reciente).</p>
+  <p>Elige el <strong>mes que quieres analizar</strong> y tu meta de ahorro. Ese mismo mes se
+     <strong>clasifica</strong> (Ahorra / Déficit) y se le genera el <strong>plan de recortes</strong>
+     para alcanzar tu meta.</p>
   <div id="mesActualNota" style="font-size:12px;color:#cbd5e1;margin:-4px 0 12px;"></div>
   <div class="ml-form" style="flex-wrap:wrap;">
     <div>
-      <label style="display:block;color:#94a3b8;font-size:12px;font-weight:600;margin-bottom:6px;">Mes de referencia (se clasifica)</label>
+      <label style="display:block;color:#94a3b8;font-size:12px;font-weight:600;margin-bottom:6px;">Mes a analizar</label>
       <select id="registroSel" class="form-input" onchange="renderResumenRegistro()" style="min-width:420px;background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.2);color:#fff;">
       </select>
     </div>
@@ -111,7 +112,7 @@
   <div class="card-header mb-4">
     <div class="card-title">📅 Historial de Análisis <span class="text-sm text-muted">({{ total_analisis }} en total)</span></div>
     <div class="text-sm text-muted" style="margin-top:4px;">
-      La <strong>clasificación</strong> corresponde al <strong>mes de referencia</strong>; el ahorro, la meta y el plan, al <strong>mes del plan</strong> (tu mes actual). Haz clic en un análisis para ver sus recomendaciones completas.
+      Cada análisis corresponde al <strong>mes que elegiste</strong>: la clasificación y el plan son del mismo mes. Haz clic en un análisis para ver sus recomendaciones completas.
     </div>
   </div>
   <div class="card-body" style="padding-top:0;">
@@ -201,12 +202,7 @@ function poblarSelectorRegistros() {
     return `<option value="${r.id}" style="color:#1e293b;background:#fff;">${txt}</option>`;
   }).join('');
 
-  // El mes actual = el más reciente (los registros vienen ordenados por -periodo).
-  const nota = document.getElementById('mesActualNota');
-  if (nota && _registros.length) {
-    const ma = _registros[0];
-    nota.innerHTML = `📌 Tu <strong>mes actual</strong> (para el plan de recortes) es <strong>${ma.mes} ${ma.anio}</strong>.`;
-  }
+  // (La nota del mes elegido se actualiza dinámicamente en renderResumenRegistro.)
 
   // Recordar el mes de referencia del último análisis (si sigue existiendo),
   // para que el formulario no vuelva al más reciente tras ejecutar.
@@ -222,6 +218,9 @@ function renderResumenRegistro() {
   if (!sel || !el) return;
   const reg = _registros.find(r => String(r.id) === String(sel.value));
   if (!reg) { el.innerHTML = ''; return; }
+
+  const nota = document.getElementById('mesActualNota');
+  if (nota) nota.innerHTML = `📌 Analizarás <strong>${reg.mes} ${reg.anio}</strong>: se clasifica y se le genera su plan de recortes para tu meta.`;
 
   const filasGastos = Object.entries(reg.gastos).map(([cat, val]) =>
     `<div style="display:flex;justify-content:space-between;font-size:12px;color:#cbd5e1;padding:2px 0;">

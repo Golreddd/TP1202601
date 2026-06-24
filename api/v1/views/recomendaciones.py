@@ -104,13 +104,14 @@ class EjecutarMLView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # 2. Resolver MES DE REFERENCIA (el que se clasifica) y MES ACTUAL (en curso).
-        #    El usuario elige el de referencia; el plan se genera sobre el más reciente.
+        # 2. Resolver el MES A ANALIZAR. El usuario elige un mes; ese MISMO mes se
+        #    clasifica Y se le genera el plan de recortes (análisis coherente de un mes).
+        #    Sin elección → el más reciente.
         registro_id = serializer.validated_data.get('registro_id')
-        mes_actual = RegistroMensual.objects.filter(
+        mes_reciente = RegistroMensual.objects.filter(
             usuario=user
         ).order_by('-periodo').first()
-        if not mes_actual:
+        if not mes_reciente:
             return Response(
                 {'error': 'No tienes registros financieros. Crea uno primero.'},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -118,23 +119,24 @@ class EjecutarMLView(APIView):
 
         if registro_id:
             try:
-                mes_referencia = RegistroMensual.objects.get(id=registro_id, usuario=user)
+                mes_analisis = RegistroMensual.objects.get(id=registro_id, usuario=user)
             except RegistroMensual.DoesNotExist:
                 return Response(
                     {'error': f'Registro #{registro_id} no encontrado.'},
                     status=status.HTTP_404_NOT_FOUND,
                 )
         else:
-            mes_referencia = mes_actual  # sin elección → referencia = mes actual
+            mes_analisis = mes_reciente  # sin elección → el mes más reciente
 
         meta_ahorro = float(serializer.validated_data.get('meta_ahorro', 0.0))
 
-        # 3. Pipeline ML: clasificación + SHAP del mes de referencia; plan del mes actual
-        #    (priorizando el gasto que más creció en el historial multi-mes).
+        # 3. Pipeline ML sobre el MES ELEGIDO: clasificación + SHAP y plan de recortes,
+        #    todo del mismo mes. El historial multi-mes solo sirve para priorizar QUÉ
+        #    categoría (la que más ha crecido) recortar primero.
         from recomendaciones.trends import historial_user_dicts
         try:
             resultado_raw = _orquestar(
-                mes_referencia.to_user_dict(), mes_actual.to_user_dict(), meta_ahorro,
+                mes_analisis.to_user_dict(), mes_analisis.to_user_dict(), meta_ahorro,
                 historial=historial_user_dicts(user),
             )
         except FileNotFoundError as exc:
@@ -149,21 +151,21 @@ class EjecutarMLView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-        # 4. Guardar/actualizar MetaMensual del MES ACTUAL (el del plan) si se dio meta
+        # 4. Guardar/actualizar MetaMensual del MES ANALIZADO si se dio meta
         meta_obj = None
         if meta_ahorro > 0:
             meta_obj, _ = MetaMensual.objects.update_or_create(
                 usuario=user,
-                periodo=date(mes_actual.periodo.year, mes_actual.periodo.month, 1),
+                periodo=date(mes_analisis.periodo.year, mes_analisis.periodo.month, 1),
                 defaults={'monto': meta_ahorro},
             )
 
-        # 5. Persistir escalares: clasificación (mes referencia) + plan (mes actual)
+        # 5. Persistir escalares: clasificación y plan, ambos del MES ELEGIDO.
         cls = resultado_raw['clase_actual']
         resultado = ResultadoML.objects.create(
             usuario=user,
-            registro=mes_actual,             # mes del plan (ahorro real del mes en curso)
-            mes_referencia=mes_referencia,   # mes clasificado
+            registro=mes_analisis,           # mes elegido: clasificado y planificado
+            mes_referencia=mes_analisis,     # mismo mes (análisis coherente)
             meta=meta_obj,
             ahorro_actual=resultado_raw['ahorro_actual'],
             meta_validada=resultado_raw['meta'],

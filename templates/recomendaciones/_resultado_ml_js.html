@@ -29,12 +29,36 @@ const FEATURE_LABELS = {
 };
 function featureLabel(f) { return FEATURE_LABELS[f] || f.replace(/_/g, ' '); }
 
+// Glosario: definición breve de cada factor del modelo (para el usuario).
+const FEATURE_DEFS = {
+  LOG_ING: 'Tu ingreso total del mes. A mayor ingreso, más probable es ahorrar.',
+  ING_PLANILLA: 'Ingreso fijo en planilla.',
+  ING_INFORMAL: 'Ingreso por trabajo informal (menos estable).',
+  ING_PER_CAPITA: 'Ingreso disponible por cada persona del hogar.',
+  INFORMAL_SHARE: 'Qué parte de tu ingreso viene de fuentes informales.',
+  DEPENDE_INFORMAL: 'Si dependes sobre todo de ingresos informales.',
+  PRESION_FINANCIERA: 'Cuánto de tu ingreso se va en gastos (gasto ÷ ingreso). Más alta = menos margen para ahorrar.',
+  COMMIT_PER_CAPITA: 'Gastos comprometidos (vivienda, servicios) por persona del hogar.',
+  NIVEL_EDUC: 'Tu nivel educativo alcanzado.',
+  MIEMBROS_HOGAR: 'Número de personas que viven en tu hogar.',
+  GASTO_ALIMENTOS_R: 'Peso del gasto en alimentos dentro de tu presupuesto.',
+  GASTO_VIVIENDA_SERVICIOS_R: 'Peso de vivienda y servicios en tu presupuesto.',
+  GASTO_TRANSPORTE_R: 'Peso del transporte en tu presupuesto.',
+  GASTO_SALUD_R: 'Peso de salud en tu presupuesto.',
+  GASTO_EDUCACION_R: 'Peso de educación en tu presupuesto.',
+  ESTRATO_SOC: 'Estrato socioeconómico estimado por tus ingresos y gastos.',
+  TIPO_FORMAL: 'Tu empleo es principalmente formal.',
+  TIPO_INFORMAL: 'Tu empleo es principalmente informal.',
+  TIPO_MIXTO: 'Combinas empleo formal e informal.',
+};
+function featureDef(f) { return FEATURE_DEFS[f] || 'Factor del modelo.'; }
+
 document.addEventListener('DOMContentLoaded', function() {
   renderDiagBanner();
   renderPlanesBanner();
   renderPlanBadges();
   renderAlternativas();
-  if (shapData.length) renderShapChart();
+  if (shapData.length) { renderShapChart(); renderShapDefs(); }
 });
 
 // ── Diagnóstico financiero (identidad contable, complementa la clasificación) ──
@@ -195,6 +219,21 @@ function renderShapChart() {
       }
     }
   });
+}
+
+// Glosario debajo del gráfico: define los factores que aparecen.
+function renderShapDefs() {
+  const el = document.getElementById('shapDefs');
+  if (!el || !shapData.length) return;
+  const items = shapData.map(x => {
+    const flecha = x.shap_value >= 0
+      ? '<span style="color:#059669;font-weight:700;">↑ favorece ahorrar</span>'
+      : '<span style="color:#dc2626;font-weight:700;">↓ empuja a déficit</span>';
+    return `<li style="margin-bottom:7px;"><strong>${featureLabel(x.feature)}</strong> ${flecha}<br>` +
+           `<span style="color:var(--text2);">${featureDef(x.feature)}</span></li>`;
+  }).join('');
+  el.innerHTML = '<div style="font-weight:600;margin-bottom:8px;font-size:13px;">📖 Qué significa cada factor</div>' +
+    `<ul style="list-style:none;padding:0;margin:0;font-size:12.5px;line-height:1.45;">${items}</ul>`;
 }
 {% endif %}
 

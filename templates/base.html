@@ -158,6 +158,18 @@
 <!-- Toast -->
 <div class="toast" id="toast"></div>
 
+<!-- Los mensajes Django (cambio de contraseña, perfil, etc.) también se muestran como
+     toast flotante: la alerta estática queda arriba y puede pasar desapercibida en
+     páginas largas (p. ej. el formulario de contraseña está al final del perfil). -->
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  var alerts = document.querySelectorAll('.msg-alert');
+  if (alerts.length && typeof showToast === 'function') {
+    showToast(alerts[alerts.length - 1].textContent.trim());
+  }
+});
+</script>
+
 <script>
 function toggleSidebar() {
   document.querySelector('.sidebar').classList.toggle('open');

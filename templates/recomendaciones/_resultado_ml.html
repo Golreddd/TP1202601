@@ -45,7 +45,7 @@ Usado por ml_insights.html y historial_detalle.html.
     <div class="stat-icon">💰</div>
     <div class="stat-label">Ahorro Real</div>
     <div class="stat-value">S/ {{ ultimo.ahorro_actual|floatformat:0 }}</div>
-    <div class="text-xs text-muted">Mes actual {{ ultimo.registro.periodo|date:"F Y"|capfirst }} · Ingresos − Gastos</div>
+    <div class="text-xs text-muted">Mes analizado {{ ultimo.registro.periodo|date:"F Y"|capfirst }} · Ingresos − Gastos</div>
   </div>
   <div class="stat-card blue">
     <div class="stat-icon">🎯</div>
@@ -69,7 +69,7 @@ Usado por ml_insights.html y historial_detalle.html.
 <!-- Estrategias de recorte (counterfactual) -->
 <div class="card mb-6">
   <div class="card-header mb-4">
-    <div class="card-title">📋 Estrategias de Ahorro — mes actual {{ ultimo.registro.periodo|date:"F Y"|capfirst }}</div>
+    <div class="card-title">📋 Estrategias de Ahorro — {{ ultimo.registro.periodo|date:"F Y"|capfirst }}</div>
     <div class="text-sm text-muted" style="margin-top:4px;">
       Planes de recorte por categoría para alcanzar tu meta este mes (lo prescindible primero, vivienda y alimentos al final)
     </div>
@@ -139,6 +139,7 @@ Usado por ml_insights.html y historial_detalle.html.
     <div class="chart-container" style="height:220px;">
       <canvas id="shapChart"></canvas>
     </div>
+    <div id="shapDefs" class="mt-4" style="border-top:1px solid var(--border);padding-top:12px;"></div>
   </div>
 </div>
 {% endif %}
