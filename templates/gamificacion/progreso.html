@@ -20,6 +20,12 @@
       Meta: <strong>S/ {{ plan_activo.meta_ahorro|floatformat:0 }}</strong> ·
       Ahorro proyectado: <strong>S/ {{ plan_activo.ahorro_proyectado|floatformat:0 }}</strong>
     </div>
+    {% if plan_activo.ahorro_proyectado < 0 %}
+    <div class="text-xs" style="margin-top:6px;color:#92400e;background:rgba(245,158,11,.12);border-radius:8px;padding:8px 12px;">
+      ⚠️ Tu meta era ambiciosa: ni con todos los recortes se llega a ahorro positivo. Este plan
+      <strong>reduce tu déficit</strong> hasta S/ {{ plan_activo.ahorro_proyectado|floatformat:0 }} (lo máximo posible). Es un primer paso para volver al equilibrio.
+    </div>
+    {% endif %}
   </div>
   <div class="card-body" style="padding-top:0;">
     {% if comparacion_plan %}
@@ -52,7 +58,7 @@
       </table>
     </div>
     <div class="info-box mt-4" style="font-size:13px;">
-      ℹ️ Se considera ✅ cuando el ahorro real ≥ 90% del proyectado por el plan.
+      ℹ️ Se considera ✅ cuando tu ahorro real alcanza el objetivo del plan (con 10% de tolerancia).
       <a href="{% url 'recomendaciones:ml_insights' %}" style="color:var(--primary);font-weight:600;margin-left:8px;">
         Actualizar análisis →
       </a>
@@ -137,7 +143,21 @@ const tasaData    = {{ tasa_data|safe }};
 document.addEventListener('DOMContentLoaded', () => {
   if (mesesLabels.length) {
     mkLine('progresoChart', mesesLabels, ahorroData, 'Ahorro (S/)', 'rgba(16,185,129,');
-    mkLine('tasaChart', mesesLabels, tasaData, 'Tasa de Ahorro %', 'rgba(139,92,246,');
+    // Tasa de ahorro: gráfico propio con eje Y en PORCENTAJE (no soles).
+    const tctx = document.getElementById('tasaChart');
+    if (tctx) new Chart(tctx, {
+      type: 'line',
+      data: { labels: mesesLabels, datasets: [{
+        label: 'Tasa de Ahorro %', data: tasaData,
+        borderColor: 'rgba(139,92,246,1)', backgroundColor: 'rgba(139,92,246,.1)',
+        borderWidth: 2.5, fill: true, tension: 0.4,
+        pointBackgroundColor: 'rgba(139,92,246,1)', pointRadius: 4,
+      }]},
+      options: { ...chartDefaults, scales: {
+        x: { grid: { display: false }, ticks: { color: '#94a3b8' } },
+        y: { grid: { color: 'rgba(0,0,0,.04)' }, ticks: { color: '#94a3b8', callback: v => v + '%' } }
+      }}
+    });
   }
 });
 </script>

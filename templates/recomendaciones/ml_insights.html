@@ -49,6 +49,59 @@
   <div id="mlError" style="color:#fca5a5;font-size:13px;margin-top:12px;display:none;"></div>
 </div>
 
+{% if tendencia %}
+<!-- ===== ANÁLISIS DE TENDENCIA MULTI-MES ===== -->
+<div class="card mb-6">
+  <div class="card-header mb-4">
+    <div class="card-title">📈 Análisis de Tendencia · {{ tendencia.n_meses }} meses</div>
+    <div class="text-sm text-muted" style="margin-top:4px;">
+      Cómo evoluciona tu ahorro a lo largo de tu historial (no solo el último mes).
+    </div>
+  </div>
+  <div class="card-body" style="padding-top:0;">
+    <!-- Dirección del ahorro -->
+    <div style="border-radius:var(--radius-sm);padding:14px 18px;font-size:14px;margin-bottom:14px;
+      {% if tendencia.tendencia == 'positiva' %}background:rgba(16,185,129,.1);border:1.5px solid rgba(16,185,129,.35);color:#065f46;
+      {% elif tendencia.tendencia == 'negativa' %}background:rgba(239,68,68,.1);border:1.5px solid rgba(239,68,68,.35);color:#dc2626;
+      {% else %}background:rgba(245,158,11,.1);border:1.5px solid rgba(245,158,11,.35);color:#92400e;{% endif %}">
+      {% if tendencia.tendencia == 'positiva' %}
+        🟢 <strong>Tu ahorro viene mejorando</strong> — subió S/ {{ tendencia.delta_ahorro|floatformat:0 }} entre tus meses recientes y los anteriores. ¡Vas por buen camino, mantén el hábito!
+      {% elif tendencia.tendencia == 'negativa' %}
+        🔴 <strong>Tu ahorro viene bajando</strong> — cayó S/ {{ tendencia.delta_ahorro|floatformat:0|cut:"-" }} respecto a tus meses anteriores. Conviene ajustar antes de que se profundice.
+      {% else %}
+        🟡 <strong>Tu ahorro se mantiene estable</strong> — sin grandes cambios en los últimos meses.
+      {% endif %}
+    </div>
+
+    <div class="grid-2" style="gap:14px;">
+      {% if tendencia.crece %}
+      <div style="border:1.5px solid rgba(239,68,68,.25);border-radius:var(--radius);padding:16px;background:rgba(239,68,68,.04);">
+        <div class="card-title mb-2" style="font-size:14px;">🎯 Dónde enfocar</div>
+        <p style="font-size:13px;color:var(--text2);line-height:1.6;margin:0;">
+          El gasto que <strong>más creció</strong> en tu historial es
+          <strong style="color:var(--danger);">{{ tendencia.cat_mayor_crecimiento }}</strong>
+          (+S/ {{ tendencia.cat_crecimiento_monto|floatformat:0 }} en promedio). Es la categoría
+          donde más conviene aplicar tus recortes.
+          {% if tendencia.en_plan %}<br><strong style="color:#065f46;">✓ Tu plan de abajo ya la prioriza en los recortes (marcada con ⬆).</strong>{% endif %}
+        </p>
+      </div>
+      {% endif %}
+      {% if tendencia.meta_escalamiento %}
+      <div style="border:1.5px solid rgba(16,185,129,.25);border-radius:var(--radius);padding:16px;background:rgba(16,185,129,.04);">
+        <div class="card-title mb-2" style="font-size:14px;">🚀 Meta de escalamiento</div>
+        <p style="font-size:13px;color:var(--text2);line-height:1.6;margin:0;">
+          Llevas 3+ meses ahorrando. Según tu promedio reciente, una meta progresiva sería
+          <strong style="color:var(--accent-dark);">S/ {{ tendencia.meta_escalamiento|floatformat:0 }}/mes</strong>
+          (promedio × 1.25). Úsala como tu próximo objetivo al ejecutar el análisis.
+        </p>
+      </div>
+      {% endif %}
+    </div>
+    <div class="text-xs text-muted mt-3">Ahorro promedio de tus últimos {{ tendencia.n_meses }} meses: S/ {{ tendencia.ahorro_promedio|floatformat:0 }}</div>
+  </div>
+</div>
+{% endif %}
+
 {% if ultimo and detalle %}
 {% include "recomendaciones/_resultado_ml.html" %}
 

@@ -8,27 +8,31 @@ Usado por ml_insights.html y historial_detalle.html.
 {% endcomment %}
 <!-- ===== RESULTADO ML: CLASIFICACIÓN ===== -->
 
-{% with esAhorra=ultimo.clase_predicha %}
+{% with esAhorra=ultimo.clase_predicha refreg=ultimo.mes_referencia|default:ultimo.registro %}
 <div class="classification-card {% if esAhorra %}saver{% else %}nonsaver{% endif %} mb-6">
   <div style="font-size:48px;margin-bottom:8px;">{% if esAhorra %}⭐{% else %}🚨{% endif %}</div>
   <div class="class-badge">{% if esAhorra %}AHORRA{% else %}DÉFICIT{% endif %}</div>
   <div class="text-sm text-muted mt-4 mb-2">
     Clasificación XGBoost del mes de referencia
-    <strong>{% if ultimo.mes_referencia %}{{ ultimo.mes_referencia.periodo|date:"F Y"|capfirst }}{% else %}{{ ultimo.registro.periodo|date:"F Y"|capfirst }}{% endif %}</strong>
+    <strong>{{ refreg.periodo|date:"F Y"|capfirst }}</strong>
     · {{ ultimo.creado_en|date:"d/m/Y H:i" }}
   </div>
   <div class="class-desc">
     Probabilidad de ahorrar: <strong>{% widthratio ultimo.prob_ahorra 1 100 %}%</strong>
     · Confianza: <strong>{{ ultimo.confianza }}</strong>
   </div>
-  {% if esAhorra and ultimo.ahorro_actual < 0 %}
+  <div class="text-sm mt-2">
+    Ahorro real de ese mes:
+    <strong class="{% if refreg.ahorro_bruto >= 0 %}text-success{% else %}text-danger{% endif %}">S/ {{ refreg.ahorro_bruto|floatformat:0 }}</strong>
+  </div>
+  {% if esAhorra and refreg.ahorro_bruto < 0 %}
   <div style="margin-top:14px;background:rgba(245,158,11,.15);border:1px solid rgba(245,158,11,.4);border-radius:8px;padding:10px 14px;font-size:13px;color:#92400e;max-width:520px;margin-left:auto;margin-right:auto;text-align:left;">
-    ⚠️ Tu perfil tiende a ahorrar, pero este mes tus gastos superaron tus ingresos.
+    ⚠️ Tu perfil tiende a ahorrar, pero en ese mes tus gastos superaron tus ingresos.
     El déficit parece puntual: recuperarlo debería ser manejable.
   </div>
-  {% elif not esAhorra and ultimo.ahorro_actual >= 0 %}
+  {% elif not esAhorra and refreg.ahorro_bruto >= 0 %}
   <div style="margin-top:14px;background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.35);border-radius:8px;padding:10px 14px;font-size:13px;color:#065f46;max-width:520px;margin-left:auto;margin-right:auto;text-align:left;">
-    ✅ Aunque tu perfil estructural tiende al déficit, este mes ahorraste.
+    ✅ Aunque tu perfil estructural tiende al déficit, en ese mes ahorraste.
     Mantener el hábito ya es un logro: vamos paso a paso.
   </div>
   {% endif %}
@@ -90,7 +94,7 @@ Usado por ml_insights.html y historial_detalle.html.
         <div class="text-xs text-muted mb-3">Ahorro tras aplicar · modelo: {{ op.clase_modelo }}</div>
         {% for r in op.reducciones %}
           <div class="plan-row">
-            <span class="text-sm">{{ r.categoria }}</span>
+            <span class="text-sm">{{ r.categoria }}{% if r.por_tendencia %} <span title="Esta categoría viene creciendo en tu historial — el plan la prioriza" style="font-size:10px;font-weight:700;color:#dc2626;background:rgba(239,68,68,.12);padding:1px 6px;border-radius:8px;">⬆ creció</span>{% endif %}</span>
             <span class="plan-delta neg">−S/ {{ r.recorte|floatformat:0 }} ({{ r.pct|floatformat:0 }}%)</span>
           </div>
         {% endfor %}

@@ -93,11 +93,25 @@ def ml_insights(request):
     paginator = Paginator(historial_qs, 8)
     page_obj = paginator.get_page(request.GET.get('page'))
 
+    # Análisis de tendencia multi-mes (para la tarjeta de contexto).
+    from recomendaciones.trends import analizar_tendencia
+    tendencia = analizar_tendencia(request.user)
+
+    # El plan ya se recomputó CON historial: predict.py marcó cada recorte que ataca
+    # una categoría en aumento (por_tendencia). Solo verificamos si aparece, para la nota.
+    if tendencia and detalle:
+        tendencia['en_plan'] = any(
+            r.get('por_tendencia')
+            for op in detalle.get('opciones', [])
+            for r in op.get('reducciones', [])
+        )
+
     return render(request, 'recomendaciones/ml_insights.html', {
         'ultimo':            ultimo,
         'detalle':           detalle,
         'page_obj':          page_obj,
         'total_analisis':    paginator.count,
+        'tendencia':         tendencia,
         'planes_convergen':  planes_convergen,
         'meta_inalcanzable': meta_inalcanzable,
         'ml_js':             ml_js,

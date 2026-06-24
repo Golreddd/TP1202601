@@ -165,8 +165,15 @@ class ResultadoML(models.Model):
         `diagnostico_shap` sustituidos por los del mes de referencia.
         """
         from src.predict import classify, recommend, shap_explain
-        meta_ahorro = float(self.meta.monto) if self.meta else 0.0
-        plan = recommend(self.registro.to_user_dict(), meta_ahorro)  # mes actual
+        from recomendaciones.trends import historial_user_dicts
+        # Usar la meta GUARDADA en este análisis (meta_validada), no self.meta.monto:
+        # varios análisis del mismo mes comparten una sola MetaMensual (update_or_create
+        # por usuario+periodo), así que self.meta.monto puede haber sido sobrescrito por
+        # un análisis posterior. meta_validada queda fija por fila => reproduce fielmente.
+        meta_ahorro = float(self.meta_validada) if self.meta_id else 0.0
+        # historial multi-mes -> el counterfactual prioriza el gasto que más creció.
+        historial = historial_user_dicts(self.usuario)
+        plan = recommend(self.registro.to_user_dict(), meta_ahorro, historial=historial)
         ref = self.mes_referencia or self.registro
         ref_dict = ref.to_user_dict()
         plan['clase_actual'] = classify(ref_dict)               # mes de referencia

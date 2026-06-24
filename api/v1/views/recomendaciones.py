@@ -46,18 +46,19 @@ def _llamar_recommend(user_dict: dict, meta_ahorro: float):
     return recommend(user_dict, meta_ahorro)
 
 
-def _orquestar(ref_dict: dict, actual_dict: dict, meta_ahorro: float):
+def _orquestar(ref_dict: dict, actual_dict: dict, meta_ahorro: float, historial=None):
     """Flujo de recomendaciones del spec (mes de referencia ≠ mes actual):
 
       • Clasificación + SHAP se calculan sobre el MES DE REFERENCIA elegido.
-      • El plan counterfactual (opciones) se genera sobre el MES ACTUAL.
+      • El plan counterfactual (opciones) se genera sobre el MES ACTUAL, priorizando
+        las categorías que más han crecido en el `historial` (multi-mes).
 
     Devuelve el dict de recommend(actual) con `clase_actual` y `diagnostico_shap`
     sustituidos por los del mes de referencia. Si ref_dict es actual_dict, el
     resultado es equivalente a recommend() directo (caso de un solo mes).
     """
     from src.predict import classify, recommend, shap_explain
-    plan = recommend(actual_dict, meta_ahorro)
+    plan = recommend(actual_dict, meta_ahorro, historial=historial)
     plan['clase_actual'] = classify(ref_dict)
     plan['diagnostico_shap'] = shap_explain(ref_dict, top=3)
     return plan
@@ -128,10 +129,13 @@ class EjecutarMLView(APIView):
 
         meta_ahorro = float(serializer.validated_data.get('meta_ahorro', 0.0))
 
-        # 3. Pipeline ML: clasificación + SHAP del mes de referencia; plan del mes actual.
+        # 3. Pipeline ML: clasificación + SHAP del mes de referencia; plan del mes actual
+        #    (priorizando el gasto que más creció en el historial multi-mes).
+        from recomendaciones.trends import historial_user_dicts
         try:
             resultado_raw = _orquestar(
                 mes_referencia.to_user_dict(), mes_actual.to_user_dict(), meta_ahorro,
+                historial=historial_user_dicts(user),
             )
         except FileNotFoundError as exc:
             return Response(

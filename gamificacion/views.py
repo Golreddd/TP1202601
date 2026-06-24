@@ -71,9 +71,14 @@ def progreso(request):
             periodo__gte=mes_inicio,
         ).order_by('periodo')[:6]
 
+        # Umbral con 10% de tolerancia hacia abajo, válido también si el ahorro
+        # proyectado es NEGATIVO (plan que solo reduce el déficit). Usar *0.90 fallaba
+        # con proyecciones negativas (hacía el umbral más exigente que la propia meta).
+        proj = plan_activo.ahorro_proyectado
+        umbral_plan = proj - 0.10 * abs(proj)
         for reg in regs_post:
             ahorro_real = float(reg.ahorro_bruto)
-            cumple = ahorro_real >= plan_activo.ahorro_proyectado * 0.90
+            cumple = ahorro_real >= umbral_plan
             comparacion_plan.append({
                 'registro':        reg,
                 'ahorro_real':     round(ahorro_real, 2),

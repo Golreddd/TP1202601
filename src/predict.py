@@ -141,13 +141,38 @@ def shap_explain(user: dict, top: int | None = None) -> list:
     return out if top is None else out[:top]
 
 
-def _allocate(user: dict, tiers: list, needed: float):
+def _crecimiento_por_categoria(historial: list | None) -> dict:
+    """Crecimiento de cada categoría a lo largo del historial (capa de contexto MULTI-MES).
+
+    `historial` es una lista de user-dicts en orden cronológico (antiguo -> reciente).
+    Devuelve {GASTO_COL: crecimiento} = promedio reciente − promedio antiguo, solo para
+    las categorías que REALMENTE crecieron (crecimiento > 0). Vacío si no hay ≥2 meses.
+    Esto permite que el counterfactual ataque el gasto que viene aumentando en el tiempo,
+    no solo la foto del mes actual.
+    """
+    if not historial or len(historial) < 2:
+        return {}
+    mitad = len(historial) // 2
+    antiguos = historial[:mitad] or historial[:1]
+    recientes = historial[mitad:]
+    out = {}
+    for c in GASTO_COLS:
+        ant = sum(float(h.get(c, 0)) for h in antiguos) / len(antiguos)
+        rec = sum(float(h.get(c, 0)) for h in recientes) / len(recientes)
+        crec = rec - ant
+        if crec > 0.5:
+            out[c] = round(crec, 2)
+    return out
+
+
+def _allocate(user: dict, tiers: list, needed: float, prioridad: dict | None = None):
     """Recorta `needed` recorriendo los TIERS en orden (lo más prescindible primero;
     vivienda y alimentos al final).
 
-    Dentro de cada tier el recorte se reparte de forma GRADUAL y proporcional a la
-    capacidad de cada categoría (cap = gasto × cut_frac): NO se agota una categoría antes
-    de tocar las otras. Solo se baja al siguiente tier si el actual ya no alcanza.
+    Si se pasa `prioridad` (crecimiento por categoría del historial), DENTRO de cada tier
+    se atacan PRIMERO las categorías que más han crecido en el tiempo (cada una hasta su
+    tope), y solo después se reparte el resto de forma proporcional. Sin `prioridad`, el
+    reparto es gradual y proporcional (comportamiento por defecto, foto del mes actual).
     Devuelve (gastos_optimizados, faltante). faltante>0 => infactible dentro de los topes.
     """
     gastos = {c: float(user.get(c, 0)) for c in GASTO_COLS}
@@ -160,18 +185,40 @@ def _allocate(user: dict, tiers: list, needed: float):
         cap_total = sum(caps.values())
         if cap_total <= 1e-9:
             continue
-        ratio = 1.0 if remaining >= cap_total else remaining / cap_total  # reparto proporcional
-        for c in tier:
-            opt[c] -= caps[c] * ratio
-        remaining -= cap_total * ratio
+        if prioridad:
+            # 1) Categorías que crecieron (mayor crecimiento primero), cada una a su tope.
+            crecen = sorted((c for c in tier if prioridad.get(c, 0) > 0),
+                            key=lambda c: prioridad[c], reverse=True)
+            for c in crecen:
+                if remaining <= 1e-9:
+                    break
+                corte = min(caps[c], remaining)
+                opt[c] -= corte
+                remaining -= corte
+            # 2) El resto del tier, proporcional con lo que quede por recortar.
+            resto = [c for c in tier if prioridad.get(c, 0) <= 0]
+            cap_resto = sum(caps[c] for c in resto)
+            if remaining > 1e-9 and cap_resto > 1e-9:
+                ratio = min(1.0, remaining / cap_resto)
+                for c in resto:
+                    opt[c] -= caps[c] * ratio
+                remaining -= cap_resto * ratio
+        else:
+            ratio = 1.0 if remaining >= cap_total else remaining / cap_total  # reparto proporcional
+            for c in tier:
+                opt[c] -= caps[c] * ratio
+            remaining -= cap_total * ratio
     return opt, remaining
 
 
-def _opcion(user: dict, strat: dict, needed: float) -> dict:
-    opt, faltante = _allocate(user, strat["tiers"], needed)
+def _opcion(user: dict, strat: dict, needed: float, prioridad: dict | None = None) -> dict:
+    opt, faltante = _allocate(user, strat["tiers"], needed, prioridad)
     user_opt = {**user, **opt}
     ahorro_res = ing_total(user) - sum(opt[c] for c in GASTO_COLS)
     clase_opt = classify(user_opt)
+    # Solo se marca la categoría que MÁS creció (coincide con la tarjeta de tendencia);
+    # la asignación sí prioriza todas las que crecieron, pero el badge resalta la líder.
+    cat_lider = max(prioridad, key=prioridad.get) if prioridad else None
     reducciones = []
     for c in GASTO_COLS:
         rec = float(user.get(c, 0)) - opt[c]
@@ -182,6 +229,8 @@ def _opcion(user: dict, strat: dict, needed: float) -> dict:
                 "sugerido": round(opt[c], 2),
                 "recorte": round(rec, 2),
                 "pct": round(rec / max(float(user.get(c, 0)), 0.01) * 100, 1),
+                # True si es la categoría que más viene creciendo en el historial (multi-mes).
+                "por_tendencia": (c == cat_lider),
                 "_prio": _CUT_PRIO.get(c, 99),
             })
     reducciones.sort(key=lambda r: r["_prio"])  # prescindible primero, vivienda/alimentos al final
@@ -258,21 +307,37 @@ def _mensaje_especialista(plan: dict, cls: dict) -> str:
         return (f"¡Bien! Este mes ahorraste S/. {ahorro:.0f}. Para consolidar el hábito subamos la "
                 f"meta poco a poco: el próximo objetivo es S/. {obj:.0f} (+S/. {paso:.0f}), sin "
                 f"sacrificios bruscos." + nota)
+    if ahorro >= obj:
+        return (f"¡Excelente! Ya alcanzas tu meta de S/. {obj:.0f} "
+                f"(ahorras S/. {ahorro:.0f}). Mantén tus hábitos y, cuando te sientas "
+                f"cómodo, súbela para seguir creciendo." + nota)
     return f"Trabajemos hacia tu meta de S/. {obj:.0f} (ahorro actual S/. {ahorro:.0f})." + nota
 
 
-def recommend(user: dict, meta: float | None = None) -> dict:
+def recommend(user: dict, meta: float | None = None, historial: list | None = None) -> dict:
     """Plan de ahorro personalizado (rol: especialista en finanzas personales).
 
     Fija un objetivo DINÁMICO según perfil + ahorro real (ver `_plan_objetivo`) y genera
     varias estrategias de recorte por tiers (gradual, vivienda/alimentos al final). Cada
     opción reporta su ahorro resultante y la clase que el modelo asigna tras el cambio. La
     opción `recomendada` es la más suave que alcanza el objetivo (la más manejable).
+
+    Si se pasa `historial` (lista de user-dicts de meses anteriores, cronológico), el
+    counterfactual deja de mirar SOLO el mes actual: prioriza recortar las categorías que
+    MÁS han crecido en el tiempo (respetando topes y orden de tiers). Esto implementa el
+    "modo seguimiento" del spec sin tocar el clasificador.
     """
     cls = classify(user)
     ah = ahorro_identidad(user)
     plan = _plan_objetivo(user, cls, meta)
     needed = max(plan["objetivo"] - ah, 0.0)
+    prioridad = _crecimiento_por_categoria(historial)
+
+    # Categoría líder de crecimiento (humanizada), para mensajes/UI.
+    cat_tend = None
+    if prioridad:
+        _k = max(prioridad, key=prioridad.get)
+        cat_tend = _k.replace("GASTO_", "").replace("_", " ").title()
 
     base = {
         "ahorro_actual": round(ah, 2),
@@ -282,6 +347,8 @@ def recommend(user: dict, meta: float | None = None) -> dict:
         "paso": plan["paso"],
         "mensaje": _mensaje_especialista(plan, cls),
         "diagnostico_shap": shap_explain(user, top=3),
+        "categoria_tendencia": cat_tend,        # None si no hay historial con crecimiento
+        "usa_historial": bool(prioridad),
     }
 
     if needed <= 1e-6:
@@ -289,7 +356,7 @@ def recommend(user: dict, meta: float | None = None) -> dict:
 
     opciones, vistos = [], set()
     for strat in _STRATEGIES:
-        op = _opcion(user, strat, needed)
+        op = _opcion(user, strat, needed, prioridad)
         if not op["reducciones"]:               # sin recortes aplicables en esos tiers
             continue
         firma = tuple((r["categoria"], r["recorte"]) for r in op["reducciones"])
