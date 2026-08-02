@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load l10n %}
 {% block title %}Dashboard{% endblock %}
 {% block page_title %}Dashboard{% endblock %}
 
@@ -87,12 +88,20 @@
               <span class="font-semi text-sm">{{ meta.icono }} {{ meta.nombre }}</span>
               <span class="font-bold text-primary">{{ meta.porcentaje }}%</span>
             </div>
-            <div class="progress-bar">
-              <div class="progress-fill {% cycle 'green' 'blue' 'orange' %}"
-                   style="width:{{ meta.porcentaje }}%"></div>
+            <!-- Spec §8.4: verde = ya ahorrado, rojo = tramo pendiente (recalculado en
+                 cada carga vía las propiedades dinámicas del modelo, nunca fijo).
+                 Colores inline a propósito (no solo la clase CSS) para que se vean
+                 siempre, sin depender de que el navegador recargue la hoja de estilos. -->
+            <div class="progress-bar goal-bar" style="background:#fca5a5;">
+              <div class="progress-fill" style="width:{{ meta.porcentaje|unlocalize }}%;background:linear-gradient(90deg,#059669,#10b981);"></div>
             </div>
             <div class="text-xs text-muted mt-4">
               S/ {{ meta.monto_actual|floatformat:0 }} de S/ {{ meta.monto_objetivo|floatformat:0 }}
+              {% if meta.cuota_mensual_sugerida %}
+                · S/ {{ meta.cuota_mensual_sugerida|floatformat:0 }}/mes para cumplirla a tiempo
+                {% if meta.desviacion_plazo == 'atrasado' %}<span class="text-danger">(vas atrasado)</span>
+                {% elif meta.desviacion_plazo == 'adelantado' %}<span class="text-success">(vas adelantado)</span>{% endif %}
+              {% endif %}
             </div>
           </div>
         {% endfor %}

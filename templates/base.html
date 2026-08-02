@@ -6,7 +6,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{% block title %}SmartSave{% endblock %} — Plataforma Financiera Inteligente</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-<link rel="stylesheet" href="{% static 'css/sigamos.css' %}?v=3">
+<link rel="stylesheet" href="{% static 'css/sigamos.css' %}?v=5">
 {% block extra_css %}{% endblock %}
 </head>
 <body>
@@ -122,13 +122,14 @@
       <button class="menu-toggle" id="menuToggle" onclick="toggleSidebar()" aria-label="Menú">☰</button>
       <div class="topbar-title">{% block page_title %}SmartSave{% endblock %}</div>
       <div class="topbar-actions">
-        {% with dias=user.racha.dias_consecutivos|default:0 %}
+        {% with dias=user.racha.dias_vigentes|default:0 %}
           {% if dias > 0 %}
             <span class="streak-badge" title="Racha activa">🔥 {{ dias }} día{{ dias|pluralize }}</span>
           {% endif %}
         {% endwith %}
         <a href="{% url 'accounts:profile' %}" class="icon-btn" title="Configuración">⚙️</a>
-        <form method="post" action="{% url 'accounts:logout' %}" style="display:inline;">
+        <form method="post" action="{% url 'accounts:logout' %}" style="display:inline;"
+              onsubmit="return confirm('¿Deseas cerrar tu sesión?');">
           {% csrf_token %}
           <button type="submit" class="btn btn-sm btn-outline">Salir</button>
         </form>
@@ -137,6 +138,22 @@
 
     <!-- Content -->
     <div class="content">
+
+      <!-- Aviso de plan desactualizado (spec §8.2): persistente hasta que el usuario
+           actualice su plan o lo descarte a propósito. No bloquea el uso de la app. -->
+      {% if plan_desactualizado %}
+      <div class="msg-alert msg-warning" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+        <span>
+          ⚠️ No actualizaste tu plan de ahorro de <strong>{{ plan_desactualizado_mes|date:"F Y" }}</strong>.
+          Tus recomendaciones pueden no reflejar tus gastos actuales —
+          <a href="{% url 'recomendaciones:ml_insights' %}" style="font-weight:600;">actualízalo para seguir avanzando con precisión</a>.
+        </span>
+        <form method="post" action="{% url 'recomendaciones:descartar_aviso_plan' %}" style="display:inline;">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-sm btn-outline">Descartar</button>
+        </form>
+      </div>
+      {% endif %}
 
       <!-- Mensajes Django -->
       {% if messages %}

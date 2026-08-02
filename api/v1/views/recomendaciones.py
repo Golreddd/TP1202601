@@ -40,13 +40,36 @@ logger = logging.getLogger(__name__)
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+def inconsistencia_datos_financieros(registro):
+    """Devuelve un mensaje si los datos del `registro` impiden calcular el ahorro,
+    o None si son consistentes.
+
+    El análisis se apoya en la identidad contable `ahorro = ingreso − gasto` y en la
+    tasa de ahorro (`ahorro / ingreso`). Con ingreso 0 esa tasa es una división entre
+    cero y cualquier plan resultante carece de sentido, así que se avisa al usuario
+    en lugar de devolver un resultado engañoso. Importes negativos ya no pueden
+    crearse (validadores del modelo), pero se verifican igual por si existen filas
+    heredadas de antes de esa validación.
+    """
+    mes = registro.periodo.strftime('%m/%Y')
+    if registro.ing_total < 0 or registro.gasto_total < 0:
+        return (f'No se puede calcular tu ahorro: el registro de {mes} tiene importes '
+                f'negativos (ingreso S/ {registro.ing_total:.2f}, gasto '
+                f'S/ {registro.gasto_total:.2f}). Corrígelo para poder analizarlo.')
+    if registro.ing_total == 0:
+        return (f'No se puede calcular tu ahorro: el ingreso total de {mes} es S/ 0. '
+                'Registra tus ingresos de ese mes para poder analizarlo.')
+    return None
+
+
 def _llamar_recommend(user_dict: dict, meta_ahorro: float):
     """Importa y llama a recommend() manejando errores de forma consistente."""
     from src.predict import recommend
     return recommend(user_dict, meta_ahorro)
 
 
-def _orquestar(ref_dict: dict, actual_dict: dict, meta_ahorro: float, historial=None):
+def _orquestar(ref_dict: dict, actual_dict: dict, meta_ahorro: float, historial=None,
+               alternativa=None, candidatos_meta=None, anti_estatismo=None):
     """Flujo de recomendaciones del spec (mes de referencia ≠ mes actual):
 
       • Clasificación + SHAP se calculan sobre el MES DE REFERENCIA elegido.
@@ -58,7 +81,8 @@ def _orquestar(ref_dict: dict, actual_dict: dict, meta_ahorro: float, historial=
     resultado es equivalente a recommend() directo (caso de un solo mes).
     """
     from src.predict import classify, recommend, shap_explain
-    plan = recommend(actual_dict, meta_ahorro, historial=historial)
+    plan = recommend(actual_dict, meta_ahorro, historial=historial, alternativa=alternativa,
+                     candidatos_meta=candidatos_meta, anti_estatismo=anti_estatismo)
     plan['clase_actual'] = classify(ref_dict)
     plan['diagnostico_shap'] = shap_explain(ref_dict, top=3)
     return plan
@@ -128,16 +152,31 @@ class EjecutarMLView(APIView):
         else:
             mes_analisis = mes_reciente  # sin elección → el mes más reciente
 
+        # 2b. Datos inconsistentes → informar en vez de devolver un plan sin sentido.
+        inconsistencia = inconsistencia_datos_financieros(mes_analisis)
+        if inconsistencia:
+            return Response(
+                {'error': inconsistencia, 'tipo_error': 'datos_inconsistentes'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         meta_ahorro = float(serializer.validated_data.get('meta_ahorro', 0.0))
+        alternativa = serializer.validated_data.get('alternativa') or None
 
         # 3. Pipeline ML sobre el MES ELEGIDO: clasificación + SHAP y plan de recortes,
-        #    todo del mismo mes. El historial multi-mes solo sirve para priorizar QUÉ
-        #    categoría (la que más ha crecido) recortar primero.
-        from recomendaciones.trends import historial_user_dicts
+        #    todo del mismo mes. El historial multi-mes prioriza QUÉ categoría recortar
+        #    primero (§5) y alimenta el menú de metas + anti-estatismo (§3, §4).
+        from recomendaciones.trends import (candidatos_meta, contexto_anti_estatismo,
+                                            analizar_tendencia, es_mes_atipico,
+                                            historial_user_dicts)
+        historial = historial_user_dicts(user)
+        tendencia = analizar_tendencia(user)
         try:
             resultado_raw = _orquestar(
                 mes_analisis.to_user_dict(), mes_analisis.to_user_dict(), meta_ahorro,
-                historial=historial_user_dicts(user),
+                historial=historial, alternativa=alternativa,
+                candidatos_meta=candidatos_meta(user, tendencia=tendencia),
+                anti_estatismo=contexto_anti_estatismo(user),
             )
         except FileNotFoundError as exc:
             return Response(
@@ -151,16 +190,20 @@ class EjecutarMLView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-        # 4. Guardar/actualizar MetaMensual del MES ANALIZADO si se dio meta
+        # 4. Guardar/actualizar MetaMensual del MES ANALIZADO con la meta YA RESUELTA
+        #    (venga de Opción B explícita, de una alternativa del menú, o automática) —
+        #    así el plan seleccionado y el seguimiento de cierre de mes usan el mismo ancla.
+        meta_resuelta = float(resultado_raw['meta'])
         meta_obj = None
-        if meta_ahorro > 0:
+        if meta_resuelta > 0:
             meta_obj, _ = MetaMensual.objects.update_or_create(
                 usuario=user,
                 periodo=date(mes_analisis.periodo.year, mes_analisis.periodo.month, 1),
-                defaults={'monto': meta_ahorro},
+                defaults={'monto': meta_resuelta},
             )
 
-        # 5. Persistir escalares: clasificación y plan, ambos del MES ELEGIDO.
+        # 5. Persistir escalares: clasificación y plan, ambos del MES ELEGIDO. Incluye
+        #    escenario/categoria_objetivo (anti-estatismo §3) para el próximo análisis.
         cls = resultado_raw['clase_actual']
         resultado = ResultadoML.objects.create(
             usuario=user,
@@ -175,17 +218,24 @@ class EjecutarMLView(APIView):
             prob_ahorra=cls['probabilidad_ahorra'],
             confianza=cls['confianza'],
             shap_top_features=resultado_raw.get('diagnostico_shap', []),
+            escenario=resultado_raw.get('escenario', ''),
+            categoria_objetivo=resultado_raw.get('categoria_objetivo') or '',
         )
 
         # 6. Verificar logros desbloqueables
         verificar_y_otorgar_logros(user, contexto='ml')
 
-        # 7. Respuesta: escalares + opciones/SHAP del resultado fresco
+        # 7. Respuesta: escalares + opciones/SHAP/menú del resultado fresco
         data = ResultadoMLSerializer(resultado).data
-        data['opciones']         = resultado_raw.get('opciones', [])
-        data['diagnostico_shap'] = resultado_raw.get('diagnostico_shap', [])
-        data['mensaje']          = resultado_raw.get('mensaje', '')
-        data['ya_cumple']        = resultado_raw.get('ya_cumple', False)
+        data['opciones']          = resultado_raw.get('opciones', [])
+        data['diagnostico_shap']  = resultado_raw.get('diagnostico_shap', [])
+        data['shap_puente']       = resultado_raw.get('shap_puente', '')
+        data['mensaje']           = resultado_raw.get('mensaje', '')
+        data['ya_cumple']         = resultado_raw.get('ya_cumple', False)
+        data['menu_alternativas'] = resultado_raw.get('menu_alternativas', [])
+        data['advertencia_meta']  = resultado_raw.get('advertencia_meta')
+        data['perfil_label']      = cls.get('perfil_label', '')
+        data['es_mes_atipico']    = es_mes_atipico(mes_analisis)
 
         return Response(data, status=status.HTTP_201_CREATED)
 
@@ -257,9 +307,13 @@ class PronosticoMLView(APIView):
             'GASTO_OTROS_BIENES':       float(data['gasto_otros_bienes']),
         }
 
-        # Llamar al pipeline ML
+        # Llamar al pipeline ML (usa el historial REAL del usuario para que la
+        # priorización de categorías y el escalamiento simulen de forma realista,
+        # aunque los montos del mes sean hipotéticos)
+        from recomendaciones.trends import historial_user_dicts
         try:
-            resultado_raw = _llamar_recommend(user_dict, meta_ahorro)
+            from src.predict import recommend
+            resultado_raw = recommend(user_dict, meta_ahorro, historial=historial_user_dicts(user))
         except FileNotFoundError as exc:
             return Response(
                 {'error': f'Modelo ML no encontrado: {exc}'},
@@ -295,7 +349,11 @@ class PronosticoMLView(APIView):
             'confianza':         cls['confianza'],
             'opciones':          resultado_raw.get('opciones', []),
             'diagnostico_shap':  resultado_raw.get('diagnostico_shap', []),
+            'shap_puente':       resultado_raw.get('shap_puente', ''),
             'mensaje':           resultado_raw.get('mensaje', ''),
+            'menu_alternativas': resultado_raw.get('menu_alternativas', []),
+            'advertencia_meta':  resultado_raw.get('advertencia_meta'),
+            'perfil_label':      cls.get('perfil_label', ''),
             # Datos de entrada para referencia del frontend
             'datos_entrada': {
                 'ing_total':    round(ing_total, 2),
@@ -368,6 +426,8 @@ class ResultadoMLDetailView(APIView):
             data['opciones']         = resultado_recomputado.get('opciones', [])
             data['diagnostico_shap'] = resultado_recomputado.get('diagnostico_shap', [])
             data['mensaje']          = resultado_recomputado.get('mensaje', '')
+            data['shap_puente']      = resultado_recomputado.get('shap_puente', '')
+            data['perfil_label']     = resultado_recomputado.get('clase_actual', {}).get('perfil_label', '')
         except Exception as exc:
             logger.warning('No se pudo recomputar resultado ML #%s: %s', pk, exc)
             data['opciones']         = []

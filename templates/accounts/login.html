@@ -20,6 +20,12 @@
            autocomplete="current-password" required>
   </div>
 
+  <div class="flex justify-end" style="margin:-8px 0 16px;">
+    <a href="{% url 'accounts:password_reset' %}" style="font-size:12px;color:var(--primary);text-decoration:none;font-weight:600;">
+      ¿Olvidaste tu contraseña?
+    </a>
+  </div>
+
   <button type="submit" class="btn btn-primary">Iniciar Sesión</button>
 </form>
 

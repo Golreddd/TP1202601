@@ -1,12 +1,18 @@
 import json
+import logging
 
+from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.core.paginator import Paginator
+from django.db import DatabaseError, transaction
 from django.db.models import Count, Q
-from django.shortcuts import get_object_or_404, render
+from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 
 from accounts.models import Usuario
 from panel_admin.models import AuditLog
+
+logger = logging.getLogger(__name__)
 
 
 @staff_member_required
@@ -51,19 +57,47 @@ def user_detail(request, pk):
 
 @staff_member_required
 def user_toggle_active(request, pk):
-    from django.contrib import messages
-    from django.shortcuts import redirect
-    from django.urls import reverse
+    """POST /panel-admin/usuarios/<pk>/estado/ — activa o desactiva una cuenta.
+
+    Siempre redirige al detalle con un mensaje explicando el resultado: antes, los
+    casos que no cumplían la condición (GET, o el admin sobre su propia cuenta)
+    caían a un render mudo y el administrador no recibía ninguna explicación.
+    """
     usuario = get_object_or_404(Usuario, pk=pk)
-    if request.method == 'POST' and usuario != request.user:
-        usuario.is_active = not usuario.is_active
-        usuario.save(update_fields=['is_active'])
-        accion = 'ACTIVAR_USUARIO' if usuario.is_active else 'DESACTIVAR_USUARIO'
-        AuditLog.registrar(admin=request.user, accion=accion, usuario_objetivo=usuario, request=request)
-        estado = 'activado' if usuario.is_active else 'desactivado'
-        messages.success(request, f'Usuario {usuario.nickname} {estado} correctamente.')
-        return redirect(reverse('panel_admin:user_detail', args=[pk]))
-    return render(request, 'panel_admin/user_detail.html', {'usuario': usuario})
+    destino = redirect(reverse('panel_admin:user_detail', args=[pk]))
+
+    if request.method != 'POST':
+        return destino
+
+    # Un admin no puede desactivarse a sí mismo (se dejaría fuera del panel).
+    if usuario == request.user:
+        messages.error(request, 'No puedes cambiar el estado de tu propia cuenta.')
+        return destino
+
+    nuevo_estado = not usuario.is_active
+    accion = 'ACTIVAR_USUARIO' if nuevo_estado else 'DESACTIVAR_USUARIO'
+    try:
+        # El cambio de estado y su registro de auditoría van juntos: si falla el
+        # log, se revierte el estado para no dejar un cambio sin trazabilidad.
+        with transaction.atomic():
+            usuario.is_active = nuevo_estado
+            usuario.save(update_fields=['is_active'])
+            AuditLog.registrar(
+                admin=request.user, accion=accion,
+                usuario_objetivo=usuario, request=request,
+            )
+    except DatabaseError:
+        logger.exception('Error al cambiar el estado del usuario #%s', pk)
+        messages.error(
+            request,
+            f'No se pudo actualizar el estado de {usuario.nickname}. '
+            'Inténtalo nuevamente o contacta al soporte técnico.',
+        )
+        return destino
+
+    estado = 'activado' if nuevo_estado else 'desactivado'
+    messages.success(request, f'Usuario {usuario.nickname} {estado} correctamente.')
+    return destino
 
 
 @staff_member_required

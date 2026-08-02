@@ -5,7 +5,9 @@ Complementa el análisis de un solo mes de `src/predict.py` con la evolución de
 usuario a lo largo de su historial:
   - dirección del ahorro (positiva / negativa / estable),
   - categoría de gasto con mayor crecimiento (dónde enfocar los recortes),
-  - meta de escalamiento sugerida (spec Modo 3: promedio últimos 3 meses × 1.25).
+  - meta de escalamiento sugerida (spec Modo 3: promedio últimos 3 meses × 1.25),
+  - candidatos para el menú de metas (spec §4, Opción A) y contexto anti-estatismo
+    (spec §3) que src/predict.py no puede calcular por sí solo (dependen de BD).
 
 Implementa los "modos adaptativos" del spec sin modificar la lógica de inferencia:
 el modelo sigue operando sobre un solo mes; esto es una capa de contexto encima.
@@ -24,6 +26,68 @@ def historial_user_dicts(usuario, n=6):
     (antiguo -> reciente), listos para pasar a recommend(historial=...)."""
     regs = list(RegistroMensual.objects.filter(usuario=usuario).order_by('-periodo')[:n])
     return [r.to_user_dict() for r in reversed(regs)]
+
+
+def es_mes_atipico(registro, n=6):
+    """Spec §6: True si el gasto total del `registro` supera 2x el promedio histórico
+    del usuario (excluyendo el propio registro). Requiere ≥2 OTROS meses para comparar;
+    si no hay suficiente historial, no se puede calificar de "atípico" (False)."""
+    from src.predict import es_mes_atipico as _es_atipico
+    otros = list(
+        RegistroMensual.objects.filter(usuario=registro.usuario)
+        .exclude(pk=registro.pk).order_by('-periodo')[:n]
+    )
+    if len(otros) < 2:
+        return False
+    promedio = _avg([r.gasto_total for r in otros])
+    return _es_atipico(registro.to_user_dict(), promedio)
+
+
+def contexto_anti_estatismo(usuario, antes_de=None):
+    """Spec §3 (anti-estatismo): devuelve {"categoria_objetivo": str} del análisis
+    INMEDIATO ANTERIOR del usuario (antes de la fecha `antes_de`, o el más reciente si
+    no se indica), para que recommend() rote la categoría objetivo si coincidiría con
+    la del mes pasado. {} si no hay análisis previo o no guardó categoría."""
+    from recomendaciones.models import ResultadoML
+    qs = ResultadoML.objects.filter(usuario=usuario).exclude(categoria_objetivo='')
+    if antes_de is not None:
+        qs = qs.filter(creado_en__lt=antes_de)
+    anterior = qs.order_by('-creado_en').first()
+    if not anterior:
+        return {}
+    return {'categoria_objetivo': anterior.categoria_objetivo}
+
+
+def candidatos_meta(usuario, tendencia=None):
+    """Spec §4 (Opción A) y §5 (Modo 3): arma los candidatos numéricos para el menú de
+    metas de un usuario cuyo ahorro real del mes ya es ≥0 — src/predict.py NO puede
+    calcularlos solo porque dependen de BD (historial + MetaLargoPlazo activa):
+      - escalamiento: se reutiliza `tendencia['meta_escalamiento']` (única fuente de la
+        fórmula Modo 3 — promedio últimos 3 meses × 1.25 — para no duplicarla; si no se
+        pasa `tendencia`, se calcula aquí con `analizar_tendencia`).
+      - meta_largo_plazo: cuota mensual sugerida de la meta activa con fecha límite más
+        próxima (spec §8.3: se recalcula siempre, nunca queda fija).
+    `ideal_20` NO se incluye aquí: src/predict.py ya lo calcula internamente (20% del
+    ingreso del propio user_dict, sin depender de BD).
+    """
+    from recomendaciones.models import MetaLargoPlazo
+
+    out = {}
+
+    if tendencia is None:
+        tendencia = analizar_tendencia(usuario)
+    if tendencia and tendencia.get('meta_escalamiento'):
+        out['escalamiento'] = tendencia['meta_escalamiento']
+
+    meta_activa = (
+        MetaLargoPlazo.objects.filter(usuario=usuario, activa=True, fecha_limite__isnull=False)
+        .order_by('fecha_limite').first()
+    )
+    if meta_activa and meta_activa.cuota_mensual_sugerida:
+        out['meta_largo_plazo'] = meta_activa.cuota_mensual_sugerida
+        out['meta_largo_plazo_nombre'] = meta_activa.nombre
+
+    return out
 
 
 def normalizar_categoria(nombre):

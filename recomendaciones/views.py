@@ -64,6 +64,7 @@ def ml_insights(request):
     # Registros disponibles para elegir con cuál ejecutar el análisis.
     # Se serializan con json.dumps para evitar el problema de formato de
     # decimales por el locale es-PE al inyectarlos en JS.
+    from recomendaciones.trends import es_mes_atipico
     registros_qs = RegistroMensual.objects.filter(
         usuario=request.user
     ).order_by('-periodo')
@@ -79,6 +80,7 @@ def ml_insights(request):
             'bonif':       round(float(r.bonif_monto), 2),
             'ahorroBruto': round(r.ahorro_bruto, 2),
             'gastos':      r.gastos_por_categoria(),
+            'esAtipico':   es_mes_atipico(r),
         }
         for r in registros_qs
     ], ensure_ascii=False)
@@ -94,7 +96,7 @@ def ml_insights(request):
     page_obj = paginator.get_page(request.GET.get('page'))
 
     # Análisis de tendencia multi-mes (para la tarjeta de contexto).
-    from recomendaciones.trends import analizar_tendencia
+    from recomendaciones.trends import analizar_tendencia, candidatos_meta
     tendencia = analizar_tendencia(request.user)
 
     # El plan ya se recomputó CON historial: predict.py marcó cada recorte que ataca
@@ -105,6 +107,12 @@ def ml_insights(request):
             for op in detalle.get('opciones', [])
             for r in op.get('reducciones', [])
         )
+
+    # Candidatos del menú de metas (spec §4, Opción A) — se muestran ANTES de ejecutar
+    # el análisis, para que el usuario elija con qué meta correr el plan. `ideal_20`
+    # (20% del ingreso) se calcula en el cliente por mes elegido (depende del ingreso
+    # de ESE mes, no del perfil general) — ver poblarSelectorRegistros() en el JS.
+    candidatos_js = json.dumps(candidatos_meta(request.user, tendencia=tendencia), ensure_ascii=False)
 
     return render(request, 'recomendaciones/ml_insights.html', {
         'ultimo':            ultimo,
@@ -119,6 +127,7 @@ def ml_insights(request):
         'tiene_registros':   registros_qs.exists(),
         'registros_js':      registros_js,
         'ultima_ref_id':     ultima_ref_id,
+        'candidatos_js':     candidatos_js,
     })
 
 
@@ -181,6 +190,17 @@ def historial_detalle(request, pk):
         'ml_js':              ml_js,
         'plan_activo_nombre': plan_activo.nombre_plan if plan_activo else '',
     })
+
+
+@login_required
+def descartar_aviso_plan(request):
+    """POST /recomendaciones/descartar-aviso-plan/ — spec §8.2: el usuario descarta
+    conscientemente el aviso de "plan desactualizado" sin necesidad de actualizar el
+    plan todavía. No bloquea el uso de la app; solo deja de mostrarse hasta que el
+    usuario elija un nuevo plan (lo que crea un PlanSeleccionado nuevo de todos modos)."""
+    if request.method == 'POST':
+        PlanSeleccionado.objects.filter(usuario=request.user, activo=True).update(aviso_descartado=True)
+    return redirect(request.META.get('HTTP_REFERER') or 'financiero:dashboard')
 
 
 @login_required

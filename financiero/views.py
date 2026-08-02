@@ -136,12 +136,30 @@ def registro_delete(request, pk):
     return render(request, 'financiero/registro_confirm_delete.html', {'registro': registro})
 
 
+MESES_PERMITIDOS = (6, 12)
+
+
 @login_required
 def analisis(request):
     """GET /financiero/analisis/ — Análisis de gastos con gráficos."""
-    n_meses = int(request.GET.get('meses', 6))
-    if n_meses not in (6, 12):
-        n_meses = 6
+    # El rango llega por querystring y es manipulable por el usuario: se valida en
+    # lugar de convertirlo a int a ciegas (antes, `?meses=abc` lanzaba ValueError y
+    # devolvía un error 500). Si es inválido se avisa y se cae al rango por defecto.
+    meses_raw = request.GET.get('meses')
+    n_meses = MESES_PERMITIDOS[0]
+    if meses_raw is not None:
+        try:
+            solicitado = int(meses_raw)
+        except (TypeError, ValueError):
+            solicitado = None
+        if solicitado in MESES_PERMITIDOS:
+            n_meses = solicitado
+        else:
+            messages.error(
+                request,
+                f'El rango "{meses_raw}" no es válido. Elige 6 o 12 meses; '
+                f'mostrando los últimos {n_meses} meses.',
+            )
 
     base_qs = RegistroMensual.objects.filter(usuario=request.user).order_by('-periodo')
 
@@ -166,6 +184,25 @@ def analisis(request):
     cat_labels = json.dumps(list(categorias.keys()))
     cat_data   = json.dumps(list(categorias.values()))
 
+    # Distribución PORCENTUAL por categoría: el gráfico de dona muestra la proporción
+    # de forma visual, pero el porcentaje numérico se calcula aquí para mostrarlo
+    # explícitamente (una dona no permite leer "Alimentos = 34,2%" con precisión).
+    total_cat = sum(categorias.values())
+    distribucion = [
+        {
+            'categoria': nombre,
+            'monto': round(monto, 2),
+            'pct': round(monto / total_cat * 100, 1) if total_cat > 0 else 0.0,
+        }
+        for nombre, monto in categorias.items() if monto > 0
+    ]
+    distribucion.sort(key=lambda c: c['pct'], reverse=True)
+
+    # Categoría con mayor crecimiento del historial (capa multi-mes ya existente).
+    # Permite reportar tanto el caso crítico como el equilibrado (sin crecimiento).
+    from recomendaciones.trends import analizar_tendencia
+    tendencia = analizar_tendencia(request.user)
+
     # Tabla "Detalle por Período": TODOS los períodos, paginados (8 por página).
     paginator = Paginator(base_qs, 8)
     page_obj = paginator.get_page(request.GET.get('page'))
@@ -180,5 +217,8 @@ def analisis(request):
         'ahorro_data':     ahorro_data,
         'cat_labels':      cat_labels,
         'cat_data':        cat_data,
+        'distribucion':    distribucion,
+        'tendencia':       tendencia,
+        'total_gastado':   round(total_cat, 2),
         'tiene_datos':     base_qs.exists(),
     })

@@ -15,19 +15,9 @@ const mlData      = { ahorro: _ml.ahorro, meta: _ml.meta, ingTotal: _ml.ingTotal
 const opcionesData = _ml.opciones || [];
 const shapData     = _ml.shap     || [];
 
-// Etiquetas legibles para las 19 features del modelo.
-const FEATURE_LABELS = {
-  NIVEL_EDUC: 'Nivel educativo', MIEMBROS_HOGAR: 'Miembros del hogar',
-  DEPENDE_INFORMAL: 'Dependencia informal', ING_PLANILLA: 'Ingreso planilla',
-  ING_INFORMAL: 'Ingreso informal', LOG_ING: 'Ingreso (log)',
-  ING_PER_CAPITA: 'Ingreso per cápita', INFORMAL_SHARE: 'Proporción informal',
-  PRESION_FINANCIERA: 'Presión financiera', COMMIT_PER_CAPITA: 'Compromiso per cápita',
-  GASTO_ALIMENTOS_R: 'Gasto alimentos', GASTO_VIVIENDA_SERVICIOS_R: 'Gasto vivienda',
-  GASTO_TRANSPORTE_R: 'Gasto transporte', GASTO_SALUD_R: 'Gasto salud',
-  GASTO_EDUCACION_R: 'Gasto educación', ESTRATO_SOC: 'Estrato social',
-  TIPO_FORMAL: 'Empleo formal', TIPO_INFORMAL: 'Empleo informal', TIPO_MIXTO: 'Empleo mixto',
-};
-function featureLabel(f) { return FEATURE_LABELS[f] || f.replace(/_/g, ' '); }
+// Etiqueta legible: el backend ya la manda (`feature_label`, spec §7); fallback local
+// por si un dato viejo no la trae.
+function featureLabel(x) { return x.feature_label || (x.feature || '').replace(/_/g, ' '); }
 
 // Glosario: definición breve de cada factor del modelo (para el usuario).
 const FEATURE_DEFS = {
@@ -204,7 +194,8 @@ function renderShapChart() {
   if (!ctx || !shapData.length) return;
   const labels = shapData.map(x => {
     const dir = x.shap_value >= 0 ? '↑ ' : '↓ ';
-    return dir + featureLabel(x.feature);
+    // Magnitud relativa (spec §7): no solo signo, también % del diagnóstico.
+    return `${dir}${featureLabel(x)} (${(x.pct_impacto ?? 0).toFixed(0)}%)`;
   });
   const vals = shapData.map(x => x.shap_value);
   const cols = vals.map(v => v >= 0 ? 'rgba(16,185,129,.75)' : 'rgba(239,68,68,.75)');
@@ -221,7 +212,8 @@ function renderShapChart() {
   });
 }
 
-// Glosario debajo del gráfico: define los factores que aparecen.
+// Glosario debajo del gráfico: define los factores que aparecen, con su tipo
+// (accionable / estructural — spec §7: prioriza lo accionable en la explicación).
 function renderShapDefs() {
   const el = document.getElementById('shapDefs');
   if (!el || !shapData.length) return;
@@ -229,7 +221,10 @@ function renderShapDefs() {
     const flecha = x.shap_value >= 0
       ? '<span style="color:#059669;font-weight:700;">↑ favorece ahorrar</span>'
       : '<span style="color:#dc2626;font-weight:700;">↓ empuja a déficit</span>';
-    return `<li style="margin-bottom:7px;"><strong>${featureLabel(x.feature)}</strong> ${flecha}<br>` +
+    const tag = x.accionable
+      ? '<span style="font-size:10px;font-weight:700;color:#0369a1;background:rgba(3,105,161,.12);padding:1px 6px;border-radius:8px;margin-left:6px;">optimizable</span>'
+      : '<span style="font-size:10px;font-weight:700;color:#64748b;background:rgba(100,116,139,.12);padding:1px 6px;border-radius:8px;margin-left:6px;">estructural</span>';
+    return `<li style="margin-bottom:7px;"><strong>${featureLabel(x)}</strong> (${(x.pct_impacto ?? 0).toFixed(0)}% del diagnóstico) ${flecha}${tag}<br>` +
            `<span style="color:var(--text2);">${featureDef(x.feature)}</span></li>`;
   }).join('');
   el.innerHTML = '<div style="font-weight:600;margin-bottom:8px;font-size:13px;">📖 Qué significa cada factor</div>' +

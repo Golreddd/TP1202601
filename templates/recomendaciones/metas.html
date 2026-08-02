@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load l10n %}
 {% block title %}Metas de Ahorro{% endblock %}
 {% block page_title %}Metas de Ahorro{% endblock %}
 
@@ -22,12 +23,23 @@
       <span class="font-bold">S/ {{ meta.monto_objetivo|floatformat:0 }}</span>
     </div>
     <div class="goal-pct">{{ meta.porcentaje }}%</div>
-    <div class="progress-bar">
-      <div class="progress-fill {% if meta.porcentaje >= 80 %}green{% elif meta.porcentaje >= 40 %}blue{% else %}orange{% endif %}"
-           style="width:{{ meta.porcentaje }}%"></div>
+    <!-- Spec §8.4: rojo = tramo pendiente, verde = ya ahorrado (recalculado siempre).
+         Colores inline a propósito, para que se vean sin depender de la hoja de estilos. -->
+    <div class="progress-bar goal-bar" style="background:#fca5a5;">
+      <div class="progress-fill" style="width:{{ meta.porcentaje|unlocalize }}%;background:linear-gradient(90deg,#059669,#10b981);"></div>
     </div>
     {% if meta.fecha_limite %}
       <div class="goal-deadline">📅 Meta: {{ meta.fecha_limite|date:"d M Y" }}</div>
+      {% if meta.cuota_mensual_sugerida and not meta.completada %}
+        <div class="text-xs text-muted mt-2">
+          S/ {{ meta.cuota_mensual_sugerida|floatformat:0 }}/mes para llegar a tiempo
+          {% if meta.desviacion_plazo == 'atrasado' %}
+            <span class="text-danger">· vas atrasado (a tu ritmo actual: ~{{ meta.plazo_estimado_meses }} meses más)</span>
+          {% elif meta.desviacion_plazo == 'adelantado' %}
+            <span class="text-success">· vas adelantado</span>
+          {% endif %}
+        </div>
+      {% endif %}
     {% endif %}
     {% if meta.completada %}
       <div class="badge badge-green" style="margin-top:10px;">✓ Completada</div>

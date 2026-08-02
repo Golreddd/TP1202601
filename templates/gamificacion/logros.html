@@ -15,7 +15,7 @@
 
   <!-- Racha actual -->
   <div class="streak-card">
-    {% with dias=user.racha.dias_consecutivos|default:0 %}
+    {% with dias=user.racha.dias_vigentes|default:0 %}
     <div class="streak-number">🔥 {{ dias }}</div>
     <div class="streak-label">día{{ dias|pluralize }} consecutivo{{ dias|pluralize }} con registros activos</div>
     {% with max=user.racha.racha_maxima|default:0 %}

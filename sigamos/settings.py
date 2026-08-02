@@ -121,6 +121,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'core.context_processors.plan_desactualizado',
             ],
         },
     },
@@ -213,7 +214,9 @@ REST_FRAMEWORK = {
 # ──────────────────────────────────────────────────────────────────────────────
 # JWT — djangorestframework-simplejwt
 #
-# CLAVE DE FIRMA: SEBASTIANRODRIGO  (configurable via JWT_SIGNING_KEY en .env)
+# CLAVE DE FIRMA: se toma de JWT_SIGNING_KEY (.env en local, variable de entorno
+#                 en Render). El valor por defecto es solo para desarrollo: en
+#                 producción DEBE definirse, nunca versionarse en el repositorio.
 # ALGORITMO:      HS256
 # ACCESS TOKEN:   1 hora  (configurable via JWT_ACCESS_HOURS en .env)
 # REFRESH TOKEN:  7 días  (configurable via JWT_REFRESH_DAYS en .env)
@@ -232,8 +235,8 @@ SIMPLE_JWT = {
     'BLACKLIST_AFTER_ROTATION': True,
     'UPDATE_LAST_LOGIN': True,
 
-    # ← Clave de firma del proyecto SIGAMOS
-    'SIGNING_KEY': config('JWT_SIGNING_KEY', default='SEBASTIANRODRIGO'),
+    # Clave de firma: obligatoria en producción vía variable de entorno.
+    'SIGNING_KEY': config('JWT_SIGNING_KEY', default='django-insecure-jwt-dev-key'),
     'ALGORITHM': 'HS256',
 
     'AUTH_HEADER_TYPES': ('Bearer',),
@@ -291,6 +294,9 @@ EMAIL_PORT = config('EMAIL_PORT', default=587, cast=int)
 EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=True, cast=bool)
 EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
 EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
+
+# Vigencia del enlace de restablecimiento de contraseña (default Django: 3 días)
+PASSWORD_RESET_TIMEOUT = 3600  # 1 hora
 
 # ──────────────────────────────────────────────────────────────────────────────
 # MENSAJES DJANGO (flash messages — para templates)

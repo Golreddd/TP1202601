@@ -11,9 +11,9 @@ Usado por ml_insights.html y historial_detalle.html.
 {% with esAhorra=ultimo.clase_predicha refreg=ultimo.mes_referencia|default:ultimo.registro %}
 <div class="classification-card {% if esAhorra %}saver{% else %}nonsaver{% endif %} mb-6">
   <div style="font-size:48px;margin-bottom:8px;">{% if esAhorra %}⭐{% else %}🚨{% endif %}</div>
-  <div class="class-badge">{% if esAhorra %}AHORRA{% else %}DÉFICIT{% endif %}</div>
+  <div class="class-badge">{% if esAhorra %}PERFIL AHORRADOR{% else %}PERFIL DEFICITARIO{% endif %}</div>
   <div class="text-sm text-muted mt-4 mb-2">
-    Clasificación XGBoost del mes de referencia
+    Tendencia estructural (XGBoost) del mes de referencia
     <strong>{{ refreg.periodo|date:"F Y"|capfirst }}</strong>
     · {{ ultimo.creado_en|date:"d/m/Y H:i" }}
   </div>
@@ -21,14 +21,18 @@ Usado por ml_insights.html y historial_detalle.html.
     Probabilidad de ahorrar: <strong>{% widthratio ultimo.prob_ahorra 1 100 %}%</strong>
     · Confianza: <strong>{{ ultimo.confianza }}</strong>
   </div>
+  <div class="text-xs text-muted mt-2" style="max-width:480px;margin-left:auto;margin-right:auto;">
+    Esto NO es el resultado exacto del mes (eso es la resta ingreso − gasto de abajo): es tu
+    <strong>tendencia estructural</strong> según ingresos, perfil y gastos comprometidos.
+  </div>
   <div class="text-sm mt-2">
-    Ahorro real de ese mes:
+    Resultado real de ese mes (ingreso − gasto):
     <strong class="{% if refreg.ahorro_bruto >= 0 %}text-success{% else %}text-danger{% endif %}">S/ {{ refreg.ahorro_bruto|floatformat:0 }}</strong>
   </div>
   {% if esAhorra and refreg.ahorro_bruto < 0 %}
   <div style="margin-top:14px;background:rgba(245,158,11,.15);border:1px solid rgba(245,158,11,.4);border-radius:8px;padding:10px 14px;font-size:13px;color:#92400e;max-width:520px;margin-left:auto;margin-right:auto;text-align:left;">
-    ⚠️ Tu perfil tiende a ahorrar, pero en ese mes tus gastos superaron tus ingresos.
-    El déficit parece puntual: recuperarlo debería ser manejable.
+    ⚠️ Tu perfil tiende a ahorrar, pero en ese mes tus gastos superaron tus ingresos — por eso la
+    meta de este análisis prioriza volver al equilibrio antes que escalar (ver más abajo).
   </div>
   {% elif not esAhorra and refreg.ahorro_bruto >= 0 %}
   <div style="margin-top:14px;background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.35);border-radius:8px;padding:10px 14px;font-size:13px;color:#065f46;max-width:520px;margin-left:auto;margin-right:auto;text-align:left;">
@@ -38,6 +42,15 @@ Usado por ml_insights.html y historial_detalle.html.
   {% endif %}
 </div>
 {% endwith %}
+
+{% if detalle.mensaje %}
+<!-- Mensaje del plan de este mes (no estático: cambia según escenario/perfil/historial) -->
+<div class="card mb-6" style="border-left:4px solid var(--primary);">
+  <div class="card-body" style="padding:16px 20px;">
+    <div class="text-sm" style="line-height:1.6;">{{ detalle.mensaje }}</div>
+  </div>
+</div>
+{% endif %}
 
 <!-- Métricas clave (ahorro REAL por identidad contable, no predicho) -->
 <div class="stats-grid mb-6" style="grid-template-columns:repeat(3,1fr);">
@@ -130,15 +143,22 @@ Usado por ml_insights.html y historial_detalle.html.
 {% if detalle.diagnostico_shap %}
 <!-- Factores SHAP — dirección hacia Ahorra (+) / Déficit (−) -->
 <div class="card mb-6">
-  <div class="card-header mb-4"><div class="card-title">📊 Factores que Influyen en tu Clasificación</div></div>
+  <div class="card-header mb-4"><div class="card-title">📊 Factores que Influyen en tu Perfil</div></div>
   <div class="card-body" style="padding-top:0;">
     <div class="text-xs text-muted mb-3">
-      Cada factor empuja tu clasificación hacia <span style="color:#059669;font-weight:700;">↑ Ahorra</span>
-      o <span style="color:#dc2626;font-weight:700;">↓ Déficit</span> (escala en log-odds, no en soles).
+      Cada factor empuja tu perfil hacia <span style="color:#059669;font-weight:700;">↑ Ahorra</span>
+      o <span style="color:#dc2626;font-weight:700;">↓ Déficit</span>, con su peso relativo dentro
+      del diagnóstico. Los <span style="color:#0369a1;font-weight:700;">accionables</span> los puedes
+      optimizar; los estructurales (ingreso/perfil) no se ajustan en un mes.
     </div>
     <div class="chart-container" style="height:220px;">
       <canvas id="shapChart"></canvas>
     </div>
+    {% if detalle.shap_puente %}
+    <div style="margin-top:14px;background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.25);border-radius:8px;padding:10px 14px;font-size:13px;color:#1e3a8a;">
+      🔗 {{ detalle.shap_puente }}
+    </div>
+    {% endif %}
     <div id="shapDefs" class="mt-4" style="border-top:1px solid var(--border);padding-top:12px;"></div>
   </div>
 </div>

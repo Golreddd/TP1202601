@@ -1,5 +1,13 @@
-from django.db import models
 from django.conf import settings
+from django.core.validators import MinValueValidator
+from django.db import models
+
+# Ningún importe (ingreso, bonificación o gasto) puede ser negativo: rompería la
+# identidad contable `ahorro = ingreso − gasto` sobre la que opera todo el análisis.
+# Se declara a nivel de MODELO —y no solo con `min=0` en el widget, que es HTML5 y
+# solo actúa en el navegador— para que la regla aplique por igual al formulario web
+# y a la API REST (DRF hereda los validadores del modelo).
+_NO_NEGATIVO = [MinValueValidator(0, message='El monto no puede ser negativo.')]
 
 
 class RegistroMensual(models.Model):
@@ -22,10 +30,12 @@ class RegistroMensual(models.Model):
     ing_planilla = models.DecimalField(
         max_digits=10, decimal_places=2, default=0,
         verbose_name='Ingreso en planilla (S/)',
+        validators=_NO_NEGATIVO,
     )
     ing_informal = models.DecimalField(
         max_digits=10, decimal_places=2, default=0,
         verbose_name='Ingreso informal (S/)',
+        validators=_NO_NEGATIVO,
     )
 
     # ── Bonificación / ingreso extraordinario del período ─────────────────────
@@ -35,17 +45,18 @@ class RegistroMensual(models.Model):
     bonif_monto = models.DecimalField(
         max_digits=10, decimal_places=2, default=0,
         verbose_name='Bonificación (CTS, gratificación, etc.) (S/)',
+        validators=_NO_NEGATIVO,
     )
 
     # ── Gastos (exactamente los 8 de GASTO_COLS en predict.py) ───────────────
-    gasto_alimentos          = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name='Alimentos (S/)')
-    gasto_vestido            = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name='Vestido (S/)')
-    gasto_vivienda_servicios = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name='Vivienda y servicios (S/)')
-    gasto_salud              = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name='Salud (S/)')
-    gasto_transporte         = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name='Transporte (S/)')
-    gasto_comunicaciones     = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name='Comunicaciones (S/)')
-    gasto_educacion          = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name='Educación (S/)')
-    gasto_otros_bienes       = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name='Otros bienes (S/)')
+    gasto_alimentos          = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name='Alimentos (S/)', validators=_NO_NEGATIVO)
+    gasto_vestido            = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name='Vestido (S/)', validators=_NO_NEGATIVO)
+    gasto_vivienda_servicios = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name='Vivienda y servicios (S/)', validators=_NO_NEGATIVO)
+    gasto_salud              = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name='Salud (S/)', validators=_NO_NEGATIVO)
+    gasto_transporte         = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name='Transporte (S/)', validators=_NO_NEGATIVO)
+    gasto_comunicaciones     = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name='Comunicaciones (S/)', validators=_NO_NEGATIVO)
+    gasto_educacion          = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name='Educación (S/)', validators=_NO_NEGATIVO)
+    gasto_otros_bienes       = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name='Otros bienes (S/)', validators=_NO_NEGATIVO)
 
     creado_en      = models.DateTimeField(auto_now_add=True)
     actualizado_en = models.DateTimeField(auto_now=True)

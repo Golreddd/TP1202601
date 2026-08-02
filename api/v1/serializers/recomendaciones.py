@@ -67,13 +67,13 @@ class ResultadoMLSerializer(serializers.ModelSerializer):
             'id',
             'ahorro_actual', 'meta_validada', 'necesita_recortar', 'alcanza_meta',
             'clase_predicha', 'label_predicha', 'prob_ahorra', 'confianza',
-            'shap_top_features',
+            'shap_top_features', 'escenario', 'categoria_objetivo',
             'periodo_registro', 'creado_en',
         ]
         read_only_fields = [
             'id', 'ahorro_actual', 'meta_validada', 'necesita_recortar', 'alcanza_meta',
             'clase_predicha', 'label_predicha', 'prob_ahorra', 'confianza',
-            'shap_top_features',
+            'shap_top_features', 'escenario', 'categoria_objetivo',
             'periodo_registro', 'creado_en',
         ]
 
@@ -118,7 +118,16 @@ class EjecutarMLSerializer(serializers.Serializer):
     meta_ahorro = serializers.FloatField(
         default=0.0,
         min_value=0,
-        help_text='Meta de ahorro mensual en S/.',
+        help_text='Meta de ahorro mensual en S/. (Opción B: meta libre). '
+                  'Se ignora si se envía `alternativa` (Opción A).',
+    )
+    alternativa = serializers.ChoiceField(
+        choices=['escalamiento', 'ideal_20', 'meta_largo_plazo'],
+        required=False, allow_null=True, allow_blank=True,
+        help_text='Opción A (spec §4): alternativa elegida del menú de metas. El monto '
+                  'se resuelve SIEMPRE en el servidor (nunca se confía en un monto del '
+                  'cliente para estas alternativas). Solo aplica si el ahorro real del '
+                  'mes analizado ya es ≥0; si no, se ignora.',
     )
 
 

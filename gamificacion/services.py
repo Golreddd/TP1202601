@@ -30,6 +30,51 @@ def _otorgar(usuario, codigo: str) -> bool:
     return creado
 
 
+def _mes_anterior(periodo):
+    if periodo.month == 1:
+        return periodo.replace(year=periodo.year - 1, month=12)
+    return periodo.replace(month=periodo.month - 1)
+
+
+def _racha_metas_mensuales_cumplidas(usuario) -> int:
+    """Spec §2 paso 5 (cierre de mes): cuenta cuántos meses consecutivos, empezando por
+    el más reciente hacia atrás, el usuario CUMPLIÓ la meta mensual que se le propuso.
+
+    La meta de un mes P es PROSPECTIVA (spec §2: "para este mes te sugerimos...") — se
+    evalúa contra el resultado real del mes SIGUIENTE a P, no contra P mismo: P ya se
+    usó como diagnóstico/counterfactual para generarla (simplificación "un solo mes
+    coherente"), así que comparar la meta de P contra el propio ahorro de P sería
+    circular (la meta de escalamiento/incremental siempre es MAYOR al ahorro que la
+    originó, por construcción — "cumplida" sería casi imposible).
+    Solo cuenta meses CALENDARIO consecutivos (sin huecos de registro); se corta en el
+    primer mes sin meta previa definida o que no la cumplió.
+    """
+    from financiero.models import RegistroMensual
+    from recomendaciones.models import MetaMensual
+
+    regs_por_periodo = {
+        r.periodo: r
+        for r in RegistroMensual.objects.filter(usuario=usuario).order_by('-periodo')[:13]
+    }
+    if not regs_por_periodo:
+        return 0
+
+    racha = 0
+    periodo = max(regs_por_periodo)
+    while periodo in regs_por_periodo:
+        anterior = _mes_anterior(periodo)
+        try:
+            meta = MetaMensual.objects.get(usuario=usuario, periodo=anterior)
+        except MetaMensual.DoesNotExist:
+            break
+        if float(regs_por_periodo[periodo].ahorro_bruto) >= float(meta.monto):
+            racha += 1
+            periodo = anterior
+        else:
+            break
+    return racha
+
+
 def verificar_y_otorgar_logros(usuario, contexto: str = '') -> list:
     """
     Evalúa el estado del usuario y desbloquea los logros que merezca.
@@ -85,6 +130,13 @@ def verificar_y_otorgar_logros(usuario, contexto: str = '') -> list:
                 and all(r.ahorro_bruto > 0 for r in recientes)
                 and _otorgar(usuario, 'TRES_MESES_VERDE')):
             nuevos.append('TRES_MESES_VERDE')
+
+        # Cierre de mes (spec §2 paso 5): cumplió la meta mensual propuesta.
+        racha_metas = _racha_metas_mensuales_cumplidas(usuario)
+        if racha_metas >= 1 and _otorgar(usuario, 'META_MENSUAL_CUMPLIDA'):
+            nuevos.append('META_MENSUAL_CUMPLIDA')
+        if racha_metas >= 3 and _otorgar(usuario, 'RACHA_METAS_3'):
+            nuevos.append('RACHA_METAS_3')
 
     # ── Logros de ANÁLISIS ML ─────────────────────────────────────────────────
     if contexto == 'ml':

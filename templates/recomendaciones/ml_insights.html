@@ -25,27 +25,43 @@
 <!-- Panel de ejecución via API -->
 <div class="ml-setup mb-6">
   <h2>Ejecutar Nuevo Análisis ML</h2>
-  <p>Elige el <strong>mes que quieres analizar</strong> y tu meta de ahorro. Ese mismo mes se
-     <strong>clasifica</strong> (Ahorra / Déficit) y se le genera el <strong>plan de recortes</strong>
-     para alcanzar tu meta.</p>
+  <p>Elige el <strong>mes que quieres analizar</strong> (con ingresos y gastos ya completos). Ese mismo
+     mes se <strong>clasifica</strong> y se le genera el <strong>plan de recortes</strong> para tu meta.</p>
   <div id="mesActualNota" style="font-size:12px;color:#cbd5e1;margin:-4px 0 12px;"></div>
-  <div class="ml-form" style="flex-wrap:wrap;">
-    <div>
-      <label style="display:block;color:#94a3b8;font-size:12px;font-weight:600;margin-bottom:6px;">Mes a analizar</label>
-      <select id="registroSel" class="form-input" onchange="renderResumenRegistro()" style="min-width:420px;background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.2);color:#fff;">
-      </select>
-    </div>
-    <div>
-      <label style="display:block;color:#94a3b8;font-size:12px;font-weight:600;margin-bottom:6px;">Meta de ahorro (S/)</label>
-      <input type="number" id="metaAhorro" class="form-input" placeholder="Ej: 500" min="0" step="0.01" style="width:160px;background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.2);color:#fff;">
-    </div>
-    <div style="padding-top:18px;">
-      <button class="btn btn-accent" id="btnML" onclick="ejecutarML()">🚀 Ejecutar Análisis</button>
-    </div>
+  <div>
+    <label style="display:block;color:#94a3b8;font-size:12px;font-weight:600;margin-bottom:6px;">Mes a analizar</label>
+    <select id="registroSel" class="form-input" onchange="renderResumenRegistro()" style="min-width:420px;background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.2);color:#fff;">
+    </select>
   </div>
+
+  <!-- Aviso de mes atípico (spec §6) -->
+  <div id="mesAtipicoBanner" style="display:none;margin-top:12px;background:rgba(245,158,11,.15);border:1px solid rgba(245,158,11,.4);border-radius:8px;padding:10px 14px;font-size:13px;color:#fde68a;"></div>
 
   <!-- Resumen del registro seleccionado (renderizado por JS) -->
   <div id="resumenRegistro" style="margin-top:16px;"></div>
+
+  <!-- Menú de metas (spec §4): Opción A (alternativas) / Opción B (meta libre) — solo
+       visible cuando el mes elegido ya tiene ahorro real ≥0 (si no, el sistema fija la
+       meta automáticamente hacia el equilibrio y este menú no aplica). -->
+  <div id="menuMetas" style="margin-top:18px;display:none;">
+    <label style="display:block;color:#94a3b8;font-size:12px;font-weight:600;margin-bottom:8px;">
+      Elige tu meta para este mes
+    </label>
+    <div id="menuMetasCards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;"></div>
+    <div style="margin-top:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+      <span style="font-size:12px;color:#94a3b8;">o define tu propia meta:</span>
+      <input type="number" id="metaAhorro" class="form-input" placeholder="Meta libre (S/)" min="0" step="0.01"
+             oninput="elegirAlternativa(null)" style="width:160px;background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.2);color:#fff;">
+    </div>
+  </div>
+  <div id="menuMetasDeficitNota" style="display:none;margin-top:14px;font-size:12.5px;color:#cbd5e1;">
+    📉 Este mes está en déficit — el sistema calculará tu meta automáticamente hacia el equilibrio
+    (no se define libremente en déficit).
+  </div>
+
+  <div style="padding-top:18px;">
+    <button class="btn btn-accent" id="btnML" onclick="ejecutarML()">🚀 Ejecutar Análisis</button>
+  </div>
 
   <div id="mlError" style="color:#fca5a5;font-size:13px;margin-top:12px;display:none;"></div>
 </div>
@@ -179,6 +195,12 @@
 const _registros = {{ registros_js|safe }};
 // Mes de referencia del último análisis: el selector lo recuerda tras ejecutar.
 const _ultimaRef = {{ ultima_ref_id|default:"null" }};
+// Candidatos del menú de metas (spec §4, Opción A): escalamiento (Modo 3) y meta a
+// largo plazo vienen precalculados del servidor (dependen de BD); ideal_20 (20% del
+// ingreso) se calcula aquí por mes elegido, porque depende del ingreso de ESE mes.
+const _candidatos = {{ candidatos_js|safe }};
+// Alternativa del menú elegida por el usuario (null = meta libre / Opción B).
+let _alternativaElegida = null;
 
 function _fmtSoles(n) {
   return 'S/ ' + Number(n).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -222,6 +244,19 @@ function renderResumenRegistro() {
   const nota = document.getElementById('mesActualNota');
   if (nota) nota.innerHTML = `📌 Analizarás <strong>${reg.mes} ${reg.anio}</strong>: se clasifica y se le genera su plan de recortes para tu meta.`;
 
+  // Aviso de mes atípico (spec §6): gastos muy por encima de lo habitual.
+  const atipicoBanner = document.getElementById('mesAtipicoBanner');
+  if (atipicoBanner) {
+    if (reg.esAtipico) {
+      atipicoBanner.style.display = 'block';
+      atipicoBanner.innerHTML = '⚠️ Este mes tuvo gastos inusuales y puede no representar tu comportamiento típico. Puedes continuar o elegir otro mes.';
+    } else {
+      atipicoBanner.style.display = 'none';
+    }
+  }
+
+  renderMenuMetas(reg);
+
   const filasGastos = Object.entries(reg.gastos).map(([cat, val]) =>
     `<div style="display:flex;justify-content:space-between;font-size:12px;color:#cbd5e1;padding:2px 0;">
        <span>${cat}</span><span>${_fmtSoles(val)}</span>
@@ -262,28 +297,101 @@ function renderResumenRegistro() {
     </div>`;
 }
 
+// ── Menú de metas (spec §4) ────────────────────────────────────────────────────
+function renderMenuMetas(reg) {
+  const menuEl       = document.getElementById('menuMetas');
+  const deficitNota  = document.getElementById('menuMetasDeficitNota');
+  const cardsEl      = document.getElementById('menuMetasCards');
+  if (!menuEl || !cardsEl) return;
+
+  _alternativaElegida = null;
+  document.getElementById('metaAhorro').value = '';
+
+  if (reg.ahorroBruto < 0) {
+    // El sistema fija la meta automáticamente en déficit (spec §4): no hay menú.
+    menuEl.style.display = 'none';
+    deficitNota.style.display = 'block';
+    return;
+  }
+  deficitNota.style.display = 'none';
+  menuEl.style.display = 'block';
+
+  const opciones = [];
+  if (_candidatos.escalamiento) {
+    opciones.push({ clave: 'escalamiento', nombre: '🚀 Escalamiento progresivo', monto: _candidatos.escalamiento,
+                    desc: 'Promedio de tus últimos 3 meses ×1.25 — sigues tu ritmo de mejora.' });
+  }
+  const ideal20 = Math.max(Math.round(reg.ingTotal * 0.20), 20);
+  opciones.push({ clave: 'ideal_20', nombre: '⚖️ 20% de tu ingreso', monto: ideal20,
+                  desc: 'Regla 50/30/20: destina una quinta parte de tu ingreso al ahorro.' });
+  if (_candidatos.meta_largo_plazo) {
+    opciones.push({ clave: 'meta_largo_plazo', nombre: `🎯 Meta: ${_candidatos.meta_largo_plazo_nombre || 'tu meta'}`,
+                    monto: _candidatos.meta_largo_plazo,
+                    desc: 'Cuota mensual necesaria para cumplirla en el plazo definido.' });
+  }
+
+  cardsEl.innerHTML = opciones.map(o => `
+    <div id="metaCard-${o.clave}" onclick="elegirAlternativa('${o.clave}', ${o.monto})"
+         style="cursor:pointer;border:1.5px solid rgba(255,255,255,.18);border-radius:10px;padding:12px 14px;background:rgba(255,255,255,.05);transition:.15s;">
+      <div style="font-size:12.5px;font-weight:700;color:#fff;margin-bottom:4px;">${o.nombre}</div>
+      <div style="font-size:17px;font-weight:800;color:#34d399;margin-bottom:4px;">${_fmtSoles(o.monto)}</div>
+      <div style="font-size:11px;color:#94a3b8;line-height:1.4;">${o.desc}</div>
+    </div>`).join('');
+}
+
+function elegirAlternativa(clave, monto) {
+  _alternativaElegida = clave;
+  document.querySelectorAll('#menuMetasCards > div').forEach(c => {
+    const activa = c.id === `metaCard-${clave}`;
+    c.style.borderColor = activa ? 'rgba(52,211,153,.8)' : 'rgba(255,255,255,.18)';
+    c.style.background  = activa ? 'rgba(52,211,153,.12)' : 'rgba(255,255,255,.05)';
+  });
+  const input = document.getElementById('metaAhorro');
+  if (clave && monto != null) {
+    input.value = monto;
+  } else {
+    // El usuario está escribiendo su propia meta (Opción B): ya no hay alternativa activa.
+    document.querySelectorAll('#menuMetasCards > div').forEach(c => {
+      c.style.borderColor = 'rgba(255,255,255,.18)';
+      c.style.background  = 'rgba(255,255,255,.05)';
+    });
+  }
+}
+
 document.addEventListener('DOMContentLoaded', poblarSelectorRegistros);
 
 {% include "recomendaciones/_resultado_ml_js.html" %}
 
 function ejecutarML() {
-  const meta = parseFloat(document.getElementById('metaAhorro').value);
+  const sel = document.getElementById('registroSel');
   const errEl = document.getElementById('mlError');
   const btn = document.getElementById('btnML');
-  const sel = document.getElementById('registroSel');
   errEl.style.display = 'none';
-
-  if (!meta || meta <= 0) {
-    errEl.textContent = '⚠️ Ingresa una meta de ahorro válida (mayor a 0).';
-    errEl.style.display = 'block';
-    return;
-  }
 
   const registroId = sel ? parseInt(sel.value, 10) : null;
   if (!registroId) {
     errEl.textContent = '⚠️ Selecciona un registro mensual para el análisis.';
     errEl.style.display = 'block';
     return;
+  }
+
+  const reg = _registros.find(r => String(r.id) === String(registroId));
+  const meta = parseFloat(document.getElementById('metaAhorro').value);
+  const enDeficit = reg && reg.ahorroBruto < 0;
+
+  // Solo se exige meta/alternativa si el mes ya está en ahorro real ≥0: en déficit el
+  // sistema la fija automáticamente (spec §4), no se pide nada al usuario.
+  if (!enDeficit && (!meta || meta <= 0) && !_alternativaElegida) {
+    errEl.textContent = '⚠️ Elige una alternativa del menú o ingresa tu propia meta de ahorro.';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  const body = { registro_id: registroId };
+  if (!enDeficit && _alternativaElegida) {
+    body.alternativa = _alternativaElegida;
+  } else if (!enDeficit && meta > 0) {
+    body.meta_ahorro = meta;
   }
 
   btn.textContent = '⏳ Analizando...';
@@ -296,13 +404,17 @@ function ejecutarML() {
       'X-CSRFToken': csrfToken,
     },
     credentials: 'same-origin',
-    body: JSON.stringify({ meta_ahorro: meta, registro_id: registroId }),
+    body: JSON.stringify(body),
   })
   .then(r => r.json())
   .then(data => {
     if (data.id || data.ahorro_actual !== undefined) {
-      showToast('✅ Análisis ML completado. Recargando...');
-      setTimeout(() => location.reload(), 1200);
+      if (data.advertencia_meta) {
+        showToast('⚠️ ' + data.advertencia_meta);
+      } else {
+        showToast('✅ Análisis ML completado. Recargando...');
+      }
+      setTimeout(() => location.reload(), 1600);
     } else {
       errEl.textContent = data.error || data.detail || 'Error al ejecutar el análisis.';
       errEl.style.display = 'block';

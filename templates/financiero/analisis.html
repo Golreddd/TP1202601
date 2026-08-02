@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load l10n %}
 {% block title %}Análisis de Gastos{% endblock %}
 {% block page_title %}Análisis de Gastos{% endblock %}
 
@@ -16,6 +17,22 @@
 
 {% if tiene_datos %}
 
+<!-- Diagnóstico de categorías: crítica o equilibrio (spec CP054/CP055) -->
+{% if tendencia %}
+  {% if tendencia.crece %}
+  <div class="msg-alert msg-warning mb-6">
+    ⚠️ <strong>Categoría crítica:</strong> {{ tendencia.cat_mayor_crecimiento }} es la que más
+    creció en tus últimos {{ tendencia.n_meses }} meses
+    (+S/ {{ tendencia.cat_crecimiento_monto|floatformat:0 }} en promedio). Es donde más conviene ajustar.
+  </div>
+  {% else %}
+  <div class="msg-alert msg-success mb-6">
+    ✅ <strong>Gastos equilibrados:</strong> ninguna categoría muestra un crecimiento fuera de lo
+    normal en tus últimos {{ tendencia.n_meses }} meses. No se detectaron categorías críticas.
+  </div>
+  {% endif %}
+{% endif %}
+
 <!-- Gráficos superiores -->
 <div class="grid-2 mb-6">
   <div class="card">
@@ -27,6 +44,29 @@
     <div class="card-body"><div class="chart-container"><canvas id="trendChart"></canvas></div></div>
   </div>
 </div>
+
+<!-- Distribución porcentual explícita por categoría (CP056/CP057) -->
+{% if distribucion %}
+<div class="card mb-6">
+  <div class="card-header mb-4">
+    <div class="card-title">Porcentaje de Gasto por Categoría</div>
+    <span class="tag">Total: S/ {{ total_gastado|floatformat:0 }} · {{ n_meses }} meses</span>
+  </div>
+  <div class="card-body" style="padding-top:0;">
+    {% for c in distribucion %}
+    <div style="margin-bottom:14px;">
+      <div class="flex flex-center justify-between mb-1" style="font-size:13px;">
+        <span class="font-semi">{{ c.categoria }}</span>
+        <span><strong>{{ c.pct }}%</strong> <span class="text-muted">· S/ {{ c.monto|floatformat:0 }}</span></span>
+      </div>
+      <div class="progress-bar">
+        <div class="progress-fill blue" style="width:{{ c.pct|unlocalize }}%;"></div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
 
 <!-- Ingresos vs Gastos vs Ahorro -->
 <div class="card mb-6">

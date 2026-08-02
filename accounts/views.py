@@ -1,3 +1,5 @@
+import logging
+
 from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
@@ -6,6 +8,26 @@ from django.views.decorators.http import require_POST
 
 from accounts.forms import CambiarPasswordWebForm, PerfilForm, PerfilMLForm, RegistroForm
 from accounts.models import Rol, Usuario
+
+logger = logging.getLogger(__name__)
+
+
+def _auditar_acceso_admin(usuario, accion, request):
+    """Registra en AuditLog el acceso/salida de una cuenta ADMINISTRATIVA.
+
+    Las acciones LOGIN_ADMIN / LOGOUT_ADMIN estaban declaradas en AuditLog.ACCIONES
+    pero ningún punto del código las creaba, así que la traza de auditoría del panel
+    quedaba incompleta. Solo se auditan cuentas admin: el login de un usuario común
+    no es una acción administrativa. Nunca debe romper el flujo de autenticación, por
+    eso cualquier fallo se registra en el log de la app y se sigue adelante.
+    """
+    try:
+        if not usuario or not usuario.es_admin:
+            return
+        from panel_admin.models import AuditLog
+        AuditLog.registrar(admin=usuario, accion=accion, request=request)
+    except Exception:
+        logger.exception('No se pudo auditar %s de %s', accion, getattr(usuario, 'email', '?'))
 
 
 def login_view(request):
@@ -22,6 +44,7 @@ def login_view(request):
         user = authenticate(request, email=email_raw, password=password)
         if user is not None:
             login(request, user)
+            _auditar_acceso_admin(user, 'LOGIN_ADMIN', request)
             return redirect(next_url)
         messages.error(request, 'Correo o contraseña incorrectos.')
 
@@ -66,14 +89,12 @@ def register_view(request):
 @require_POST
 def logout_view(request):
     """POST /auth/logout/"""
+    # Se audita ANTES de cerrar la sesión: después, request.user ya es anónimo.
+    _auditar_acceso_admin(request.user if request.user.is_authenticated else None,
+                          'LOGOUT_ADMIN', request)
     logout(request)
     messages.success(request, 'Sesión cerrada correctamente.')
     return redirect('accounts:login')
-
-
-def password_reset_view(request):
-    """GET /auth/password-reset/ — placeholder."""
-    return render(request, 'accounts/password_reset.html')
 
 
 @login_required

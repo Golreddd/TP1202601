@@ -89,14 +89,61 @@ def progreso(request):
                                    if plan_activo.ahorro_proyectado > 0 else 0,
             })
 
+    # ── Presupuesto por categoría (spec §8.1) ─────────────────────────────────
+    # Pantalla persistente y consultiva: monto máximo sugerido por categoría (del plan
+    # elegido) vs. lo YA gastado en el mes más reciente desde que se adoptó el plan.
+    # Solo referencia visual — nunca dispara alertas (coherente con §2: sin tiempo real).
+    presupuesto_categorias = []
+    registro_actual_plan = None
+    if plan_activo:
+        # comparacion_plan ya está en orden ascendente por periodo (regs_post): el
+        # último elemento es el registro más reciente desde que se adoptó el plan.
+        registro_actual_plan = comparacion_plan[-1]['registro'] if comparacion_plan else (
+            RegistroMensual.objects.filter(usuario=request.user, periodo__gte=mes_inicio)
+            .order_by('-periodo').first()
+        )
+    if plan_activo and registro_actual_plan:
+        MAPA_LABEL = {
+            'GASTO_ALIMENTOS': 'Alimentos', 'GASTO_VESTIDO': 'Vestido',
+            'GASTO_VIVIENDA_SERVICIOS': 'Vivienda/Serv.', 'GASTO_SALUD': 'Salud',
+            'GASTO_TRANSPORTE': 'Transporte', 'GASTO_COMUNICACIONES': 'Comunicaciones',
+            'GASTO_EDUCACION': 'Educación', 'GASTO_OTROS_BIENES': 'Otros',
+        }
+        MAPA_ICONO = {
+            'GASTO_ALIMENTOS': '🍽️', 'GASTO_VESTIDO': '👕',
+            'GASTO_VIVIENDA_SERVICIOS': '🏠', 'GASTO_SALUD': '💊',
+            'GASTO_TRANSPORTE': '🚌', 'GASTO_COMUNICACIONES': '📶',
+            'GASTO_EDUCACION': '🎓', 'GASTO_OTROS_BIENES': '🛍️',
+        }
+        gastos_reales = registro_actual_plan.gastos_por_categoria()
+        for clave, sugerido in (plan_activo.gastos_sugeridos or {}).items():
+            label = MAPA_LABEL.get(clave, clave)
+            sugerido = float(sugerido)
+            gastado = float(gastos_reales.get(label, 0.0))
+            pct = round(gastado / max(sugerido, 0.01) * 100, 1)
+            presupuesto_categorias.append({
+                'categoria':  label,
+                'icono':      MAPA_ICONO.get(clave, '💰'),
+                'sugerido':   round(sugerido, 2),
+                'gastado':    round(gastado, 2),
+                'disponible': round(max(sugerido - gastado, 0.0), 2),
+                'excedente':  round(max(gastado - sugerido, 0.0), 2),
+                'excedido':   gastado > sugerido,
+                'pct':        min(pct, 999),
+                'pct_barra':  min(pct, 100),
+            })
+        presupuesto_categorias.sort(key=lambda c: c['pct'], reverse=True)
+
     return render(request, 'gamificacion/progreso.html', {
-        'registros':             registros,
-        'meses_labels':          meses_labels,
-        'ahorro_data':           ahorro_data,
-        'tasa_data':             tasa_data,
-        'mejor_tasa':            mejor_tasa,
-        'total_logros':          total_logros,
-        'total_logros_posibles': total_logros_posibles,
-        'plan_activo':           plan_activo,
-        'comparacion_plan':      comparacion_plan,
+        'registros':               registros,
+        'meses_labels':            meses_labels,
+        'ahorro_data':             ahorro_data,
+        'tasa_data':               tasa_data,
+        'mejor_tasa':              mejor_tasa,
+        'total_logros':            total_logros,
+        'total_logros_posibles':   total_logros_posibles,
+        'plan_activo':             plan_activo,
+        'comparacion_plan':        comparacion_plan,
+        'presupuesto_categorias':  presupuesto_categorias,
+        'registro_actual_plan':    registro_actual_plan,
     })

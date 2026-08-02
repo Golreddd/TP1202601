@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load l10n %}
 {% block title %}Progreso Financiero{% endblock %}
 {% block page_title %}Progreso Financiero{% endblock %}
 
@@ -73,6 +74,44 @@
       <a href="{% url 'financiero:registro_create' %}" class="btn btn-sm btn-accent mt-3" style="display:inline-flex;">
         + Agregar registro del mes
       </a>
+    </div>
+    {% endif %}
+
+    {% if presupuesto_categorias %}
+    <!-- Presupuesto por categoría (spec §8.1): referencia visual, sin alertas -->
+    <div style="border-top:1px solid var(--border);margin-top:18px;padding-top:18px;">
+      <div class="card-header mb-4" style="padding:0;">
+        <div class="card-title" style="font-size:15px;">
+          📋 Presupuesto por categoría
+        </div>
+        <span class="tag">{{ registro_actual_plan.periodo|date:"F Y"|capfirst }}</span>
+      </div>
+      <div class="text-xs text-muted mb-4">
+        Lo gastado vs. lo sugerido por tu plan <strong>{{ plan_activo.nombre_plan }}</strong>.
+        Solo es referencia: no genera alertas ni notificaciones.
+      </div>
+      <div class="budget-grid">
+        {% for c in presupuesto_categorias %}
+        <div class="budget-card {% if c.excedido %}over{% else %}ok{% endif %}">
+          <div class="budget-card-head">
+            <span class="budget-card-icon">{{ c.icono }}</span>
+            <span class="budget-card-name">{{ c.categoria }}</span>
+            {% if c.excedido %}
+              <span class="badge badge-orange" style="margin-left:auto;">+S/ {{ c.excedente|floatformat:0 }}</span>
+            {% else %}
+              <span class="badge badge-green" style="margin-left:auto;">✓ en presupuesto</span>
+            {% endif %}
+          </div>
+          <div class="progress-bar budget-bar {% if c.excedido %}over-bar{% endif %} mt-2">
+            <div class="progress-fill" style="width:{{ c.pct_barra|unlocalize }}%;"></div>
+          </div>
+          <div class="budget-card-amounts">
+            <span>S/ {{ c.gastado|floatformat:0 }} gastado</span>
+            <span class="text-muted">de S/ {{ c.sugerido|floatformat:0 }}</span>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
     </div>
     {% endif %}
   </div>

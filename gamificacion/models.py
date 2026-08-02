@@ -20,6 +20,22 @@ class Racha(models.Model):
     def __str__(self):
         return f'{self.usuario.nickname}: {self.dias_consecutivos} días'
 
+    @property
+    def dias_vigentes(self):
+        """Días de racha REALMENTE vigentes hoy.
+
+        `dias_consecutivos` solo se recalcula cuando el usuario vuelve a registrar,
+        así que por sí solo seguiría mostrando "🔥 5 días" meses después de que el
+        usuario dejó de registrar. Esta propiedad caduca la racha al consultarla:
+        sigue vigente solo si el último registro fue hoy o ayer.
+        """
+        from datetime import date, timedelta
+        if not self.ultimo_registro:
+            return 0
+        if date.today() - self.ultimo_registro > timedelta(days=1):
+            return 0
+        return self.dias_consecutivos
+
     def actualizar(self, fecha_hoy):
         """
         Actualiza la racha según la fecha del nuevo registro.

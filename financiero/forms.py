@@ -51,6 +51,23 @@ class RegistroMensualForm(forms.ModelForm):
         except (ValueError, IndexError, TypeError):
             raise forms.ValidationError('Formato inválido. Selecciona un mes válido.')
 
+    def clean(self):
+        """El ingreso total del mes debe ser > 0.
+
+        Sin ingreso no existe la identidad `ahorro = ingreso − gasto` sobre la que
+        opera el análisis (la tasa de ahorro sería una división entre cero). La API
+        ya exigía esto en RegistroMensualSerializer.validate(); aquí se replica para
+        que el formulario web no pueda crear registros que luego el análisis no
+        pueda procesar.
+        """
+        cleaned = super().clean()
+        ing = (cleaned.get('ing_planilla') or 0) + (cleaned.get('ing_informal') or 0)
+        if not self.errors and ing <= 0:
+            raise forms.ValidationError(
+                'El ingreso total del mes (planilla + informal) debe ser mayor a S/ 0.'
+            )
+        return cleaned
+
     def get_initial_periodo(self):
         """Retorna el período en formato YYYY-MM para el widget."""
         p = self.instance.periodo if self.instance and self.instance.pk else None

@@ -3,7 +3,10 @@ services:
     name: smartsave
     runtime: python
     plan: free
-    buildCommand: pip install -r requirements.txt && python manage.py collectstatic --no-input
+    # `migrate` es obligatorio: la base de datos de producción se crea vacía y sin
+    # este paso el servicio arranca sin tablas. Incluye además los seeds que viajan
+    # como migraciones de datos (roles y catálogo de logros).
+    buildCommand: pip install -r requirements.txt && python manage.py migrate --no-input && python manage.py collectstatic --no-input
     startCommand: gunicorn sigamos.wsgi:application --workers 2 --timeout 120
     envVars:
       - key: SECRET_KEY
@@ -12,21 +15,40 @@ services:
         value: "False"
       - key: ALLOWED_HOSTS
         value: ".onrender.com"
+
+      # ── Secretos ──────────────────────────────────────────────────────────
+      # `sync: false` = el valor NO viaja en este archivo (que sí se versiona en
+      # GitHub); se carga a mano en Render → Environment. Nunca poner credenciales
+      # reales aquí.
+      - key: DATABASE_URL
+        sync: false
       - key: JWT_SIGNING_KEY
-        value: "SEBASTIANRODRIGO"
+        generateValue: true
+
       - key: JWT_ACCESS_HOURS
         value: "1"
       - key: JWT_REFRESH_DAYS
         value: "7"
-      - key: EMAIL_BACKEND
-        value: "django.core.mail.backends.console.EmailBackend"
-      - key: DEFAULT_FROM_EMAIL
-        value: "noreply@sigamos.pe"
-      - key: DATABASE_URL
-        fromDatabase:
-          name: smartsave-db
-          property: connectionString
 
-databases:
-  - name: smartsave-db
-    plan: free
+      # ── Correo (restablecimiento de contraseña) ───────────────────────────
+      # Con el backend de consola los correos solo se imprimen en los logs y el
+      # usuario nunca los recibe: en producción debe ser SMTP real.
+      - key: EMAIL_BACKEND
+        value: "django.core.mail.backends.smtp.EmailBackend"
+      - key: EMAIL_HOST
+        value: "smtp.gmail.com"
+      - key: EMAIL_PORT
+        value: "587"
+      - key: EMAIL_USE_TLS
+        value: "True"
+      - key: EMAIL_HOST_USER
+        sync: false
+      - key: EMAIL_HOST_PASSWORD
+        sync: false
+      - key: DEFAULT_FROM_EMAIL
+        sync: false
+
+# NOTA: la base de datos ya no se declara en este blueprint. Se administra como
+# recurso independiente en Render y su cadena de conexión se carga manualmente en
+# la variable DATABASE_URL (ver arriba), de modo que las credenciales nunca queden
+# versionadas en el repositorio.

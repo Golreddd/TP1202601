@@ -39,6 +39,17 @@
 </div>
 
 <!-- Distribución por clasificación (Ahorra / Déficit) -->
+{% if not clase_dist %}
+<div class="card">
+  <div class="empty-state">
+    <div class="empty-icon">📊</div>
+    <h3>Sin estadísticas disponibles</h3>
+    <p>Todavía no se han ejecutado análisis ML en el sistema, por lo que no hay datos
+       suficientes para generar la distribución por clasificación.</p>
+  </div>
+</div>
+{% endif %}
+
 {% if clase_dist %}
 <div class="grid-2">
   <div class="card">
