@@ -2,12 +2,12 @@ services:
   - type: web
     name: smartsave
     runtime: python
-    # Debe coincidir con el plan real del servicio. En `free` Render bloquea el
-    # tráfico SMTP saliente (puertos 25/465/587), lo que impide enviar el correo
-    # de restablecimiento de contraseña; además el servicio se suspende por
-    # inactividad. Dejar aquí `free` haría que un re-sync del blueprint degradara
-    # el servicio y reapareciera ese fallo.
-    plan: starter
+    # El plan (instance type) NO se declara aquí a propósito: se administra desde el
+    # dashboard de Render. Declararlo arriesga que un re-sync del blueprint cambie el
+    # plan contratado — en particular, volver a `free` reactivaría el bloqueo de
+    # tráfico SMTP saliente (puertos 25/465/587) y el sistema dejaría de enviar el
+    # correo de restablecimiento de contraseña.
+    # IMPORTANTE: el servicio debe correr en un plan de pago para que el correo funcione.
     # `migrate` es obligatorio: la base de datos de producción se crea vacía y sin
     # este paso el servicio arranca sin tablas. Incluye además los seeds que viajan
     # como migraciones de datos (roles y catálogo de logros).
