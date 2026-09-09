@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Agregar Montos Extra{% endblock %}
+{% block page_title %}Agregar Montos Extra{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <div class="page-title">Agregar Montos Extra</div>
+    <div class="page-sub">{{ registro.periodo|date:"F Y"|capfirst }} — súmalos al total ya registrado del mes</div>
+  </div>
+  <a href="{% url 'financiero:registro_list' %}" class="btn btn-sm btn-outline">← Volver</a>
+</div>
+
+<div class="info-box mb-6">
+  Esto <strong>suma</strong> los montos que ingreses a lo que ya tiene el registro — no lo
+  reemplaza. Actualmente: ingresos S/ {{ registro.ing_total|floatformat:2 }}, gastos
+  S/ {{ registro.gasto_total|floatformat:2 }}. Deja en blanco (o en 0) lo que no quieras agregar.
+</div>
+
+<form method="post">
+  {% csrf_token %}
+
+  <div class="card mb-6">
+    <div class="card-header mb-4"><div class="card-title">💰 Ingresos extra</div></div>
+    <div class="card-body" style="padding-top:0;">
+      <div class="form-row cols-2">
+        {% for campo, etiqueta, emoji in campos_ingreso %}
+        <div class="form-group">
+          <label class="form-label">{{ emoji }} {{ etiqueta }} extra (S/)</label>
+          <input type="number" name="{{ campo }}" class="form-input" min="0" step="0.01" placeholder="0.00">
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <div class="card mb-6">
+    <div class="card-header mb-4"><div class="card-title">💳 Gastos extra por categoría</div></div>
+    <div class="card-body" style="padding-top:0;">
+      <div class="form-row cols-2">
+        {% for campo, etiqueta, emoji in campos_gasto %}
+        <div class="form-group">
+          <label class="form-label">{{ emoji }} {{ etiqueta }} extra (S/)</label>
+          <input type="number" name="{{ campo }}" class="form-input" min="0" step="0.01" placeholder="0.00">
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <div class="flex gap-3 justify-end">
+    <a href="{% url 'financiero:registro_list' %}" class="btn btn-outline">Cancelar</a>
+    <button type="submit" class="btn btn-primary" style="width:auto;">Agregar Montos</button>
+  </div>
+</form>
+{% endblock %}

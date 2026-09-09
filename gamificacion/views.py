@@ -7,6 +7,16 @@ from core.constants import MESES_ES_ABREV
 from gamificacion.models import Logro, LogroUsuario
 
 
+def _listar_nombres(nombres):
+    """'A' | 'A y B' | 'A, B y C' — para armar los mensajes de alerta_presupuesto."""
+    nombres = list(nombres)
+    if not nombres:
+        return ''
+    if len(nombres) == 1:
+        return nombres[0]
+    return ', '.join(nombres[:-1]) + ' y ' + nombres[-1]
+
+
 @login_required
 def logros(request):
     """GET /gamificacion/logros/"""
@@ -37,6 +47,7 @@ def progreso(request):
     from financiero.models import RegistroMensual
     from gamificacion.models import Logro, LogroUsuario
     from recomendaciones.models import PlanSeleccionado
+    from recomendaciones.trends import comparacion_plan as calcular_comparacion_plan, mes_inicio_plan
 
     registros = list(
         RegistroMensual.objects.filter(usuario=request.user).order_by('-periodo')[:12]
@@ -57,49 +68,22 @@ def progreso(request):
         usuario=request.user, activo=True
     ).select_related('resultado__registro').first()
 
-    comparacion_plan = []
-    if plan_activo:
-        # Evaluar el plan desde el MES para el que fue generado (el mes actual del
-        # análisis), no desde antes: un mes que ya transcurrió no pudo seguir un plan
-        # que aún no existía. Fallback al mes de adopción si no hay resultado asociado.
-        if plan_activo.resultado_id and plan_activo.resultado.registro_id:
-            mes_inicio = plan_activo.resultado.registro.periodo.replace(day=1)
-        else:
-            mes_inicio = plan_activo.fecha_seleccion.date().replace(day=1)
-        regs_post = RegistroMensual.objects.filter(
-            usuario=request.user,
-            periodo__gte=mes_inicio,
-        ).order_by('periodo')[:6]
+    # Regla de "cumple/no cumple" un plan: única fuente en recomendaciones.trends,
+    # reutilizada también por gamificacion.services para los logros de constancia.
+    comparacion_plan = calcular_comparacion_plan(request.user, plan_activo)
 
-        # Umbral con 10% de tolerancia hacia abajo, válido también si el ahorro
-        # proyectado es NEGATIVO (plan que solo reduce el déficit). Usar *0.90 fallaba
-        # con proyecciones negativas (hacía el umbral más exigente que la propia meta).
-        proj = plan_activo.ahorro_proyectado
-        umbral_plan = proj - 0.10 * abs(proj)
-        for reg in regs_post:
-            ahorro_real = float(reg.ahorro_bruto)
-            cumple = ahorro_real >= umbral_plan
-            comparacion_plan.append({
-                'registro':        reg,
-                'ahorro_real':     round(ahorro_real, 2),
-                'ahorro_objetivo': plan_activo.ahorro_proyectado,
-                'cumple':          cumple,
-                'diff':            round(ahorro_real - plan_activo.ahorro_proyectado, 2),
-                'porcentaje':      round(ahorro_real / plan_activo.ahorro_proyectado * 100, 1)
-                                   if plan_activo.ahorro_proyectado > 0 else 0,
-            })
-
-    # ── Presupuesto por categoría (spec §8.1) ─────────────────────────────────
-    # Pantalla persistente y consultiva: monto máximo sugerido por categoría (del plan
-    # elegido) vs. lo YA gastado en el mes más reciente desde que se adoptó el plan.
-    # Solo referencia visual — nunca dispara alertas (coherente con §2: sin tiempo real).
+    # ── Presupuesto por categoría (spec §8.1, Tarea 3) ────────────────────────
+    # Monto máximo sugerido por categoría (del plan elegido) vs. lo YA gastado en el mes
+    # más reciente desde que se adoptó el plan. Ya no es "solo referencia visual": más
+    # abajo se deriva `alerta_presupuesto` a partir de estos mismos datos — sin
+    # persistencia, se recalcula en cada render, no hay botón de "aplicar".
     presupuesto_categorias = []
     registro_actual_plan = None
     if plan_activo:
         # comparacion_plan ya está en orden ascendente por periodo (regs_post): el
         # último elemento es el registro más reciente desde que se adoptó el plan.
         registro_actual_plan = comparacion_plan[-1]['registro'] if comparacion_plan else (
-            RegistroMensual.objects.filter(usuario=request.user, periodo__gte=mes_inicio)
+            RegistroMensual.objects.filter(usuario=request.user, periodo__gte=mes_inicio_plan(plan_activo))
             .order_by('-periodo').first()
         )
     if plan_activo and registro_actual_plan:
@@ -134,6 +118,59 @@ def progreso(request):
             })
         presupuesto_categorias.sort(key=lambda c: c['pct'], reverse=True)
 
+    # ── Alerta de presupuesto (spec Tarea 3) ──────────────────────────────────
+    # Sin persistencia: se deriva de nuevo en cada render. NO se recalcula "cumple" de
+    # otra forma — se toma tal cual de comparacion_plan (10% de tolerancia ya aplicado
+    # ahí), y las categorías/montos salen tal cual de presupuesto_categorias.
+    alerta_presupuesto = None
+    categorias_excedidas = [c for c in presupuesto_categorias if c['excedido']]
+    if categorias_excedidas:
+        entrada_mes_actual = next(
+            (c for c in comparacion_plan if c['registro'] == registro_actual_plan), None
+        )
+        # Si el mes actual no aparece en comparacion_plan (p. ej. queda fuera de la
+        # ventana de 6 meses evaluados) no hay un "cumple" confiable que consultar —
+        # se omite la alerta en vez de inventar un estado.
+        if entrada_mes_actual is not None:
+            total_excedente = sum(c['excedente'] for c in presupuesto_categorias)
+            total_disponible = sum(
+                c['disponible'] for c in presupuesto_categorias if not c['excedido']
+            )
+            nombres_excedidas = _listar_nombres(c['categoria'] for c in categorias_excedidas)
+
+            if entrada_mes_actual['cumple']:
+                alerta_presupuesto = {
+                    'nivel': 'success',
+                    'mensaje': (
+                        f'Te pasaste en {nombres_excedidas} pero lo compensaste en otras '
+                        f'y aun así alcanzaste tu meta de ahorro de este mes.'
+                    ),
+                }
+            elif total_disponible >= total_excedente:
+                nombres_disponibles = _listar_nombres(
+                    c['categoria'] for c in presupuesto_categorias
+                    if not c['excedido'] and c['disponible'] > 0
+                )
+                alerta_presupuesto = {
+                    'nivel': 'warning',
+                    'mensaje': (
+                        f'Te pasaste S/ {total_excedente:.0f} en {nombres_excedidas}, pero '
+                        f'tenías S/ {total_disponible:.0f} disponibles en {nombres_disponibles} '
+                        f'que lo hubieran cubierto. El faltante frente a tu meta viene de otro '
+                        f'lado, no de estas categorías.'
+                    ),
+                }
+            else:
+                alerta_presupuesto = {
+                    'nivel': 'error',
+                    'mensaje': (
+                        f'No se puede cubrir tu exceso de gasto con lo disponible en otras '
+                        f'categorías: gastaste S/ {total_excedente - total_disponible:.0f} más '
+                        f'de lo presupuestado en total, por eso no cumpliste la meta de ahorro '
+                        f'de este mes. Considera ajustar tu meta a tu capacidad real de ahorro.'
+                    ),
+                }
+
     return render(request, 'gamificacion/progreso.html', {
         'registros':               registros,
         'meses_labels':            meses_labels,
@@ -146,4 +183,5 @@ def progreso(request):
         'comparacion_plan':        comparacion_plan,
         'presupuesto_categorias':  presupuesto_categorias,
         'registro_actual_plan':    registro_actual_plan,
+        'alerta_presupuesto':      alerta_presupuesto,
     })

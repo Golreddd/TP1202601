@@ -1,3 +1,5 @@
+from datetime import date
+
 from django import forms
 from recomendaciones.models import MetaLargoPlazo
 
@@ -6,6 +8,19 @@ INPUT = {'class': 'form-input'}
 
 
 class MetaLargoPlazoForm(forms.ModelForm):
+    """
+    Todo el seguimiento de la meta (meses_restantes, cuota_mensual_sugerida,
+    plazo_estimado_meses, desviacion_plazo) razona en MESES, nunca en días — el día
+    dentro del mes no se usa en ningún cálculo. Por eso `fecha_limite` usa el mismo
+    patrón que RegistroMensualForm.periodo en financiero/forms.py: input type="month"
+    + clean que normaliza a date(year, month, 1). El modelo sigue siendo un DateField
+    normal; solo cambia cómo se captura en el formulario.
+    """
+    fecha_limite = forms.CharField(
+        label='Fecha límite (mes)', required=False,
+        widget=forms.DateInput(attrs={**INPUT, 'type': 'month'}),
+    )
+
     class Meta:
         model = MetaLargoPlazo
         fields = ['nombre', 'icono', 'monto_objetivo', 'monto_actual', 'fecha_limite']
@@ -14,11 +29,17 @@ class MetaLargoPlazoForm(forms.ModelForm):
             'icono':          forms.Select(attrs=INPUT),
             'monto_objetivo': forms.NumberInput(attrs={**INPUT, 'min': 1, 'step': '0.01', 'placeholder': '0.00'}),
             'monto_actual':   forms.NumberInput(attrs={**INPUT, 'min': 0, 'step': '0.01', 'placeholder': '0.00'}),
-            # format='%Y-%m-%d' es obligatorio: el <input type="date"> de HTML5 solo
-            # rellena su valor si viene en ISO (yyyy-mm-dd). Sin esto, al editar la
-            # fecha aparece vacía y se perdería al guardar.
-            'fecha_limite':   forms.DateInput(attrs={**INPUT, 'type': 'date'}, format='%Y-%m-%d'),
         }
+
+    def clean_fecha_limite(self):
+        value = self.cleaned_data.get('fecha_limite', '')
+        if not value:
+            return None
+        try:
+            year, month = value.split('-')
+            return date(int(year), int(month), 1)
+        except (ValueError, IndexError, TypeError):
+            raise forms.ValidationError('Formato inválido. Selecciona un mes válido.')
 
     def clean(self):
         cleaned = super().clean()

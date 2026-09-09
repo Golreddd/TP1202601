@@ -321,9 +321,17 @@ function renderMenuMetas(reg) {
     opciones.push({ clave: 'escalamiento', nombre: '🚀 Escalamiento progresivo', monto: _candidatos.escalamiento,
                     desc: 'Promedio de tus últimos 3 meses ×1.25 — sigues tu ritmo de mejora.' });
   }
-  const ideal20 = Math.max(Math.round(reg.ingTotal * 0.20), 20);
-  opciones.push({ clave: 'ideal_20', nombre: '⚖️ 20% de tu ingreso', monto: ideal20,
-                  desc: 'Regla 50/30/20: destina una quinta parte de tu ingreso al ahorro.' });
+  if (reg.perfilDeficitario) {
+    // Perfil deficitario: la tarjeta "de sistema" es la meta suave (10% del ingreso, o
+    // un paso del 5% si aún ahorra poco), no el 20% — que para este perfil casi siempre
+    // termina exigiendo el plan Decidido. El monto viene del servidor (misma regla).
+    opciones.push({ clave: 'suave_10', nombre: '🌱 Ahorro suave — 10% de tu ingreso', monto: reg.suave10,
+                    desc: 'Para tu perfil: un escalón alcanzable sin tocar gastos esenciales.' });
+  } else {
+    const ideal20 = Math.max(Math.round(reg.ingTotal * 0.20), 20);
+    opciones.push({ clave: 'ideal_20', nombre: '⚖️ 20% de tu ingreso', monto: ideal20,
+                    desc: 'Regla 50/30/20: destina una quinta parte de tu ingreso al ahorro.' });
+  }
   if (_candidatos.meta_largo_plazo) {
     opciones.push({ clave: 'meta_largo_plazo', nombre: `🎯 Meta: ${_candidatos.meta_largo_plazo_nombre || 'tu meta'}`,
                     monto: _candidatos.meta_largo_plazo,
@@ -337,6 +345,9 @@ function renderMenuMetas(reg) {
       <div style="font-size:17px;font-weight:800;color:#34d399;margin-bottom:4px;">${_fmtSoles(o.monto)}</div>
       <div style="font-size:11px;color:#94a3b8;line-height:1.4;">${o.desc}</div>
     </div>`).join('');
+
+  // Perfil deficitario: la meta suave queda preseleccionada (el usuario puede cambiarla).
+  if (reg.perfilDeficitario) elegirAlternativa('suave_10', reg.suave10);
 }
 
 function elegirAlternativa(clave, monto) {

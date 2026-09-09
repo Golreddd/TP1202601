@@ -122,7 +122,7 @@ class EjecutarMLSerializer(serializers.Serializer):
                   'Se ignora si se envía `alternativa` (Opción A).',
     )
     alternativa = serializers.ChoiceField(
-        choices=['escalamiento', 'ideal_20', 'meta_largo_plazo'],
+        choices=['escalamiento', 'ideal_20', 'meta_largo_plazo', 'suave_10'],
         required=False, allow_null=True, allow_blank=True,
         help_text='Opción A (spec §4): alternativa elegida del menú de metas. El monto '
                   'se resuelve SIEMPRE en el servidor (nunca se confía en un monto del '

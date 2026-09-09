@@ -48,7 +48,7 @@ document.addEventListener('DOMContentLoaded', function() {
   renderPlanesBanner();
   renderPlanBadges();
   renderAlternativas();
-  if (shapData.length) { renderShapChart(); renderShapDefs(); }
+  if (shapData.length) { renderShapResumen(); renderShapIncentivo(); renderShapChart(); renderShapDefs(); }
 });
 
 // ── Diagnóstico financiero (identidad contable, complementa la clasificación) ──
@@ -94,7 +94,18 @@ function renderPlanesBanner() {
   if (!el || !opcionesData.length) return;
   const cumplen = opcionesData.filter(o => o.alcanza_meta);
   let style, texto;
-  if (cumplen.length >= opcionesData.length) {
+  const suave = opcionesData[0];
+  if (mlData.clase === 0 && suave) {
+    // Perfil deficitario: siempre se recomienda empezar por la estrategia más suave,
+    // alcance o no toda la meta (lo sostenible primero; el siguiente escalón después).
+    style = 'background:rgba(16,185,129,.1);border:1.5px solid rgba(16,185,129,.35);color:#065f46;';
+    const cubre = Math.round(suave.ahorro_resultante || 0);
+    const meta  = Math.round(mlData.meta || 0);
+    const siguiente = opcionesData[1] ? opcionesData[1].nombre : null;
+    texto = suave.alcanza_meta
+      ? `🌱 <strong>Para tu perfil te recomendamos el plan ${suave.nombre}:</strong> alcanza tu meta sin tocar gastos esenciales. Empieza por aquí y sostenlo un par de meses.`
+      : `🌱 <strong>Para tu perfil te recomendamos empezar por el plan ${suave.nombre}:</strong> te deja en S/ ${cubre.toLocaleString('es-PE')} de los S/ ${meta.toLocaleString('es-PE')} de tu meta. Sostenlo 1–2 meses y recién pasa a ${siguiente || 'un plan más exigente'}; para tu perfil, un cambio sostenible vale más que uno brusco.`;
+  } else if (cumplen.length >= opcionesData.length) {
     style = 'background:rgba(16,185,129,.1);border:1.5px solid rgba(16,185,129,.35);color:#065f46;';
     texto = '✅ <strong>Todas las estrategias alcanzan tu meta.</strong> Elige la más cómoda para ti.';
   } else if (cumplen.length === 0) {
@@ -192,24 +203,102 @@ function renderAlternativas() {
 function renderShapChart() {
   const ctx = document.getElementById('shapChart');
   if (!ctx || !shapData.length) return;
-  const labels = shapData.map(x => {
+  // Orden para el usuario: primero lo que SÍ puede mover este mes, luego por peso.
+  const ordenados = shapOrdenados();
+  const labels = ordenados.map(x => {
     const dir = x.shap_value >= 0 ? '↑ ' : '↓ ';
-    // Magnitud relativa (spec §7): no solo signo, también % del diagnóstico.
-    return `${dir}${featureLabel(x)} (${(x.pct_impacto ?? 0).toFixed(0)}%)`;
+    const tag = x.accionable ? ' · optimizable' : '';
+    return `${dir}${featureLabel(x)}${tag}`;
   });
-  const vals = shapData.map(x => x.shap_value);
-  const cols = vals.map(v => v >= 0 ? 'rgba(16,185,129,.75)' : 'rgba(239,68,68,.75)');
+  // Se grafica el % de impacto (magnitud entendible), no el log-odds crudo del modelo.
+  const vals = ordenados.map(x => x.pct_impacto ?? Math.abs(x.shap_value));
+  const cols = ordenados.map(x => x.shap_value >= 0 ? 'rgba(16,185,129,.75)' : 'rgba(239,68,68,.75)');
   new Chart(ctx, {
     type: 'bar',
-    data: { labels, datasets: [{ label: 'Impacto (log-odds)', data: vals, backgroundColor: cols, borderRadius: 4, borderSkipped: false }] },
+    data: { labels, datasets: [{ label: '% del diagnóstico', data: vals, backgroundColor: cols, borderRadius: 4, borderSkipped: false }] },
     options: { ...chartDefaults, indexAxis: 'y',
-      plugins: { legend: { display: false } },
+      plugins: { legend: { display: false },
+                 tooltip: { callbacks: { label: c => `${c.parsed.x.toFixed(0)}% del diagnóstico` } } },
       scales: {
-        x: { grid: { color: 'rgba(0,0,0,.04)' }, ticks: { color: '#94a3b8' } },
+        x: { min: 0, max: 100, grid: { color: 'rgba(0,0,0,.04)' }, ticks: { color: '#94a3b8', callback: v => v + '%' } },
         y: { grid: { display: false }, ticks: { color: '#64748b', font: { size: 12 } } }
       }
     }
   });
+}
+
+function shapOrdenados() {
+  return [...shapData].sort((a, b) =>
+    (b.accionable ? 1 : 0) - (a.accionable ? 1 : 0) || (b.pct_impacto ?? 0) - (a.pct_impacto ?? 0));
+}
+
+// Plan recomendado (para ligar cada factor a una acción concreta en soles).
+function planRecomendado() {
+  return opcionesData.find(o => o.recomendada) || opcionesData[0] || null;
+}
+
+// Factor del modelo -> categoría de gasto tal como aparece en `reducciones[].categoria`.
+const FEATURE_A_CATEGORIA = {
+  GASTO_ALIMENTOS_R: 'Alimentos', GASTO_VIVIENDA_SERVICIOS_R: 'Vivienda Servicios',
+  GASTO_TRANSPORTE_R: 'Transporte', GASTO_SALUD_R: 'Salud', GASTO_EDUCACION_R: 'Educacion',
+};
+
+// (d) Una línea arriba del gráfico: cuál es tu mayor palanca este mes.
+function renderShapResumen() {
+  const el = document.getElementById('shapResumen');
+  if (!el || !shapData.length) return;
+  const accionable = shapOrdenados().find(x => x.accionable);
+  let html;
+  if (accionable) {
+    html = `🔑 <strong>Tu mayor palanca este mes: ${featureLabel(accionable)}</strong> ` +
+           `(${(accionable.pct_impacto ?? 0).toFixed(0)}% de tu diagnóstico y sí depende de ti).`;
+  } else {
+    html = `🔑 <strong>Tus factores de mayor peso son estructurales</strong> (ingreso o perfil, no cambian en un mes): ` +
+           `tu palanca real está en los gastos flexibles del plan recomendado.`;
+  }
+  el.innerHTML = `<div style="background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.25);border-radius:8px;padding:10px 14px;font-size:13.5px;color:#1e3a8a;">${html}</div>`;
+}
+
+// (c) Incentivo: el modelo re-clasifica cada plan; mostramos cuánto sube la probabilidad.
+function renderShapIncentivo() {
+  const el = document.getElementById('shapIncentivo');
+  if (!el) return;
+  const plan = planRecomendado();
+  if (!plan || plan.prob_ahorra_modelo == null) { el.innerHTML = ''; return; }
+  const antes = Math.round((mlData.probAhorra || 0) * 100);
+  const despues = Math.round(plan.prob_ahorra_modelo * 100);
+  const delta = despues - antes;
+  let html;
+  if (delta > 0) {
+    html = `🎯 <strong>Si aplicas el plan ${plan.nombre}, tu probabilidad de ahorrar sube de ${antes}% a ${despues}%</strong> ` +
+           `(+${delta} puntos) y tu ahorro del mes quedaría en S/ ${Math.round(plan.ahorro_resultante || 0).toLocaleString('es-PE')}.`;
+  } else {
+    html = `🎯 <strong>Con el plan ${plan.nombre} tu ahorro del mes quedaría en S/ ${Math.round(plan.ahorro_resultante || 0).toLocaleString('es-PE')}.</strong> ` +
+           `Tu probabilidad de ahorrar se mantiene en ${antes}%: tu perfil ya es sólido, el plan convierte esa tendencia en soles reales.`;
+  }
+  el.innerHTML = `<div style="background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.35);border-radius:8px;padding:10px 14px;font-size:13.5px;color:#065f46;">${html}</div>`;
+}
+
+// (b) Acción concreta en soles para cada factor optimizable, ligada al plan recomendado.
+function accionParaFactor(x) {
+  const plan = planRecomendado();
+  if (!x.accionable || !plan) return '';
+  const cat = FEATURE_A_CATEGORIA[x.feature];
+  const fmt = n => 'S/ ' + Math.round(n).toLocaleString('es-PE');
+  if (cat) {
+    const enPlan = (plan.reducciones || []).find(r => r.categoria === cat);
+    if (enPlan) {
+      return `💡 <strong>Qué puedes hacer:</strong> el plan ${plan.nombre} lo baja de ${fmt(enPlan.original)} a ${fmt(enPlan.sugerido)} (−${fmt(enPlan.recorte)}).`;
+    }
+    const otro = opcionesData.find(o => (o.reducciones || []).some(r => r.categoria === cat));
+    if (otro) {
+      const r = otro.reducciones.find(r => r.categoria === cat);
+      return `💡 <strong>Qué puedes hacer:</strong> el plan ${plan.nombre} no lo toca (protege lo esencial); ${otro.nombre} lo bajaría −${fmt(r.recorte)}.`;
+    }
+    return `💡 <strong>Qué puedes hacer:</strong> ningún plan lo recorta este mes (está en su mínimo realista); revísalo con calma (renegociar, cambiar de plan).`;
+  }
+  // Ratios agregados (presión financiera, gasto comprometido per cápita): el plan completo.
+  return `💡 <strong>Qué puedes hacer:</strong> el plan ${plan.nombre} reduce tu gasto total ${fmt(plan.reduccion_total || 0)} este mes, lo que alivia directamente este factor.`;
 }
 
 // Glosario debajo del gráfico: define los factores que aparecen, con su tipo
@@ -217,7 +306,8 @@ function renderShapChart() {
 function renderShapDefs() {
   const el = document.getElementById('shapDefs');
   if (!el || !shapData.length) return;
-  const items = shapData.map(x => {
+  const items = shapOrdenados().map(x => {
+    const accion = accionParaFactor(x);
     const flecha = x.shap_value >= 0
       ? '<span style="color:#059669;font-weight:700;">↑ favorece ahorrar</span>'
       : '<span style="color:#dc2626;font-weight:700;">↓ empuja a déficit</span>';
@@ -225,7 +315,8 @@ function renderShapDefs() {
       ? '<span style="font-size:10px;font-weight:700;color:#0369a1;background:rgba(3,105,161,.12);padding:1px 6px;border-radius:8px;margin-left:6px;">optimizable</span>'
       : '<span style="font-size:10px;font-weight:700;color:#64748b;background:rgba(100,116,139,.12);padding:1px 6px;border-radius:8px;margin-left:6px;">estructural</span>';
     return `<li style="margin-bottom:7px;"><strong>${featureLabel(x)}</strong> (${(x.pct_impacto ?? 0).toFixed(0)}% del diagnóstico) ${flecha}${tag}<br>` +
-           `<span style="color:var(--text2);">${featureDef(x.feature)}</span></li>`;
+           `<span style="color:var(--text2);">${featureDef(x.feature)}</span>` +
+           (accion ? `<br><span style="color:#065f46;">${accion}</span>` : '') + `</li>`;
   }).join('');
   el.innerHTML = '<div style="font-weight:600;margin-bottom:8px;font-size:13px;">📖 Qué significa cada factor</div>' +
     `<ul style="list-style:none;padding:0;margin:0;font-size:12.5px;line-height:1.45;">${items}</ul>`;

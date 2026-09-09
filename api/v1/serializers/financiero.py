@@ -56,8 +56,13 @@ class RegistroMensualSerializer(serializers.ModelSerializer):
         return attrs
 
     def validate_periodo(self, value):
-        # Siempre normalizar al primer día del mes
-        return date(value.year, value.month, 1)
+        periodo = date(value.year, value.month, 1)  # siempre normalizar al primer día del mes
+        hoy = date.today()
+        if periodo > date(hoy.year, hoy.month, 1):
+            raise serializers.ValidationError(
+                'No puedes registrar un mes futuro. El mes más reciente disponible es el actual.'
+            )
+        return periodo
 
 
 class DashboardSerializer(serializers.Serializer):

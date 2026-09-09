@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% load l10n %}
+{% block title %}Distribuir Ahorro{% endblock %}
+{% block page_title %}Distribuir Ahorro{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <div class="page-title">Distribuir Ahorro del Mes</div>
+    <div class="page-sub">{{ registro.periodo|date:"F Y"|capfirst }} — decide cuánto va a cada meta</div>
+  </div>
+</div>
+
+<div style="max-width:600px;">
+  <div class="info-box mb-6">
+    Este mes ahorraste <strong>S/ {{ ahorro_bruto|floatformat:0 }}</strong>. Puedes repartirlo
+    entre tus metas activas ahora, o hacerlo más tarde.
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="post">
+        {% csrf_token %}
+        {% for meta in metas_activas %}
+        <div class="form-group mb-4">
+          <label class="form-label">{{ meta.icono }} {{ meta.nombre }}
+            <span class="text-muted text-xs">(S/ {{ meta.monto_actual|floatformat:0 }} de S/ {{ meta.monto_objetivo|floatformat:0 }})</span>
+          </label>
+          <input type="number" name="monto_{{ meta.id }}" class="form-input" min="0"
+                 max="{{ ahorro_bruto|floatformat:2|unlocalize }}" step="0.01" value="0" placeholder="0.00">
+        </div>
+        {% endfor %}
+
+        <div class="flex gap-3 justify-end mt-4">
+          <button type="submit" name="omitir" value="1" class="btn btn-outline">Omitir por ahora</button>
+          <button type="submit" class="btn btn-primary" style="width:auto;">Distribuir Ahorro</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -40,7 +40,15 @@
     <div class="card-body"><div class="chart-container"><canvas id="catPieChart"></canvas></div></div>
   </div>
   <div class="card">
-    <div class="card-header"><div class="card-title">Tendencia Mensual de Gastos</div></div>
+    <div class="card-header">
+      <div class="card-title">Tendencia Mensual de Gastos</div>
+      <select id="categoriaTrendSelect" class="form-input" style="width:auto;font-size:12.5px;padding:5px 10px;">
+        <option value="__total__">Total</option>
+        {% for c in cat_labels_list %}
+        <option value="{{ c }}">{{ c }}</option>
+        {% endfor %}
+      </select>
+    </div>
     <div class="card-body"><div class="chart-container"><canvas id="trendChart"></canvas></div></div>
   </div>
 </div>
@@ -150,10 +158,24 @@ const ingresosData = {{ ingresos_data|safe }};
 const ahorroData   = {{ ahorro_data|safe }};
 const catLabels    = {{ cat_labels|safe }};
 const catData      = {{ cat_data|safe }};
+const gastosCategoriaSeries = {{ gastos_categoria_series|safe }};
 
 document.addEventListener('DOMContentLoaded', () => {
   if (catData.length)    mkDoughnut('catPieChart', catLabels, catData);
-  if (gastosData.length) mkLine('trendChart', mesesLabels, gastosData, 'Gastos');
+
+  // "Tendencia Mensual de Gastos": por defecto muestra el gasto TOTAL mes a mes;
+  // el selector de categoría cambia la serie a la evolución de esa categoría puntual.
+  const trendChart = mkLine('trendChart', mesesLabels, gastosData, 'Gastos');
+  const categoriaSelect = document.getElementById('categoriaTrendSelect');
+  if (trendChart && categoriaSelect) {
+    categoriaSelect.addEventListener('change', () => {
+      const elegido = categoriaSelect.value;
+      const esTotal = elegido === '__total__';
+      trendChart.data.datasets[0].data  = esTotal ? gastosData : (gastosCategoriaSeries[elegido] || []);
+      trendChart.data.datasets[0].label = esTotal ? 'Gastos' : elegido;
+      trendChart.update();
+    });
+  }
 
   // Ingresos vs Gastos vs Ahorro (multi-line)
   const ctx = document.getElementById('ivaChart');

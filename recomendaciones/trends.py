@@ -65,8 +65,11 @@ def candidatos_meta(usuario, tendencia=None):
       - escalamiento: se reutiliza `tendencia['meta_escalamiento']` (única fuente de la
         fórmula Modo 3 — promedio últimos 3 meses × 1.25 — para no duplicarla; si no se
         pasa `tendencia`, se calcula aquí con `analizar_tendencia`).
-      - meta_largo_plazo: cuota mensual sugerida de la meta activa con fecha límite más
-        próxima (spec §8.3: se recalcula siempre, nunca queda fija).
+      - meta_largo_plazo: SUMA de la cuota mensual sugerida de TODAS las metas activas
+        con fecha límite (spec §8.3: cada cuota se recalcula siempre, nunca queda fija).
+        Si solo hubiera una meta con fecha límite, el resultado es igual que antes; con
+        varias, el monto sugerido cubre el avance de todas a la vez (antes solo se
+        tomaba la de fecha más próxima y las demás quedaban fuera del candidato).
     `ideal_20` NO se incluye aquí: src/predict.py ya lo calcula internamente (20% del
     ingreso del propio user_dict, sin depender de BD).
     """
@@ -79,14 +82,64 @@ def candidatos_meta(usuario, tendencia=None):
     if tendencia and tendencia.get('meta_escalamiento'):
         out['escalamiento'] = tendencia['meta_escalamiento']
 
-    meta_activa = (
+    metas_activas = (
         MetaLargoPlazo.objects.filter(usuario=usuario, activa=True, fecha_limite__isnull=False)
-        .order_by('fecha_limite').first()
+        .order_by('fecha_limite')
     )
-    if meta_activa and meta_activa.cuota_mensual_sugerida:
-        out['meta_largo_plazo'] = meta_activa.cuota_mensual_sugerida
-        out['meta_largo_plazo_nombre'] = meta_activa.nombre
+    cuotas = [(m, m.cuota_mensual_sugerida) for m in metas_activas]
+    cuotas = [(m, c) for m, c in cuotas if c]
+    if cuotas:
+        out['meta_largo_plazo'] = round(sum(c for _, c in cuotas), 2)
+        nombres = [m.nombre for m, _ in cuotas]
+        out['meta_largo_plazo_nombre'] = (
+            nombres[0] if len(nombres) == 1
+            else ', '.join(nombres[:-1]) + ' y ' + nombres[-1]
+        )
 
+    return out
+
+
+def mes_inicio_plan(plan_activo):
+    """Mes desde el que un PlanSeleccionado empieza a evaluarse: el mes del análisis
+    que lo originó (mismo período que su `resultado.registro`), o el de adopción si no
+    tiene un análisis asociado. Único punto de esta regla — usado por `comparacion_plan`
+    y por gamificacion/views.py::progreso para el fallback sin registros posteriores."""
+    if plan_activo.resultado_id and plan_activo.resultado.registro_id:
+        return plan_activo.resultado.registro.periodo.replace(day=1)
+    return plan_activo.fecha_seleccion.date().replace(day=1)
+
+
+def comparacion_plan(usuario, plan_activo):
+    """Compara, mes a mes desde que se adoptó `plan_activo`, el ahorro real contra el
+    ahorro proyectado del plan (10% de tolerancia hacia abajo, válida también si la
+    proyección es negativa — un plan que solo reduce el déficit).
+
+    Única fuente de la regla "cumple/no cumple" un plan: la usa
+    gamificacion/views.py::progreso para la tabla de seguimiento y
+    gamificacion/services.py para los logros de constancia de plan (no se duplica el
+    umbral en ningún otro lugar)."""
+    if not plan_activo:
+        return []
+    mes_inicio = mes_inicio_plan(plan_activo)
+    regs_post = RegistroMensual.objects.filter(
+        usuario=usuario, periodo__gte=mes_inicio,
+    ).order_by('periodo')[:6]
+
+    proj = plan_activo.ahorro_proyectado
+    umbral_plan = proj - 0.10 * abs(proj)
+    out = []
+    for reg in regs_post:
+        ahorro_real = float(reg.ahorro_bruto)
+        cumple = ahorro_real >= umbral_plan
+        out.append({
+            'registro':        reg,
+            'ahorro_real':     round(ahorro_real, 2),
+            'ahorro_objetivo': plan_activo.ahorro_proyectado,
+            'cumple':          cumple,
+            'diff':            round(ahorro_real - plan_activo.ahorro_proyectado, 2),
+            'porcentaje':      round(ahorro_real / plan_activo.ahorro_proyectado * 100, 1)
+                               if plan_activo.ahorro_proyectado > 0 else 0,
+        })
     return out
 
 

@@ -98,6 +98,7 @@ _UMBRAL_TOLERANCIA    = 0.05   # spec §6: banda de "casi equilibrio" = 5% del i
                                 # (unifica el umbral: aplica tanto al override de perfil
                                 # ahorrador con balance negativo como al déficit genuino bajo)
 _AHORRO_MINIMO_FRAC   = 0.03   # primer ahorro mínimo ~3% del ingreso
+_SUAVE_DEFICITARIO_FRAC = 0.10 # perfil deficitario que ya ahorra >5%: siguiente escalón suave = 10%
 _PASO_MIN             = 20.0   # paso mínimo en soles para que la meta tenga sentido
 _IDEAL_INGRESO_FRAC   = 0.20   # regla 50/30/20 (spec §4, Opción A.2)
 _MES_ATIPICO_FACTOR   = 2.0    # spec §6: gasto > 2x promedio histórico => mes atípico
@@ -110,6 +111,25 @@ _MES_ATIPICO_FACTOR   = 2.0    # spec §6: gasto > 2x promedio histórico => mes
 _ESCENARIOS_DETERMINISTAS = {
     "deficit", "deficit_bajo", "deficit_leve_override", "deficit_significativo_override",
 }
+
+
+def objetivo_suave_deficitario(user: dict) -> float:
+    """Meta "suave" para PERFIL DEFICITARIO con mes en verde (ahorro real >= 0):
+      - si ya ahorra más del 5% del ingreso -> 10% del ingreso (siguiente escalón suave);
+      - si ahorra 5% o menos                -> lo que ahorra + un paso del 5% del ingreso.
+    Siempre queda ESTRICTAMENTE por encima del ahorro actual (si el 10% ya quedó por
+    debajo de lo que ahorra, se usa ahorro + paso). Es función pura de (ingreso, ahorro):
+    la misma que usa el menú de metas de ML Insights para mostrar la tarjeta antes de
+    ejecutar el análisis, así el monto que ve el usuario y el que resuelve el servidor
+    coinciden siempre."""
+    ing = ing_total(user)
+    ahorro = max(ahorro_identidad(user), 0.0)
+    paso = max(round(ing * _PASO_NO_AHORRADOR), _PASO_MIN)
+    if ing > 0 and ahorro / ing > _UMBRAL_TOLERANCIA:
+        objetivo = float(round(ing * _SUAVE_DEFICITARIO_FRAC))
+        if objetivo > ahorro:
+            return objetivo
+    return float(round(ahorro + paso, 2))
 
 
 def load_models() -> dict:
@@ -400,6 +420,11 @@ def _plan_objetivo(user: dict, cls: dict, meta: float | None = None,
 
     candidatos = dict(candidatos_meta or {})
     candidatos.setdefault("ideal_20", max(round(ing * _IDEAL_INGRESO_FRAC), _PASO_MIN))
+    # Perfil deficitario: su escalón "de sistema" es la meta suave, no el 20% (que para
+    # este perfil suele exigir el plan Decidido). El monto se resuelve SIEMPRE aquí.
+    perfil_deficitario = cls["clase"] == 0
+    if perfil_deficitario:
+        candidatos["suave_10"] = objetivo_suave_deficitario(user)
 
     # ── Reproducción fiel de un análisis pasado (ResultadoML.recomputar) ─────────
     # Reusa el MISMO escenario y monto ya resueltos entonces, sin re-derivar reglas:
@@ -427,14 +452,18 @@ def _plan_objetivo(user: dict, cls: dict, meta: float | None = None,
         if cls["clase"] == 1:
             # Contradicción: el modelo dice "ahorra" pero el mes real está en déficit.
             if abs(ahorro) <= umbral:
+                # Déficit leve (<=5% del ingreso) con perfil ahorrador: no se queda en 0,
+                # se le propone directamente un ahorro suave del 10% del ingreso.
                 escenario = "deficit_leve_override"
-                menu = [{"clave": "equilibrio", "nombre": "Equilibrio sólido", "monto": 0.0,
-                         "descripcion": "Consolida tu balance en cero antes de pensar en escalar.",
+                objetivo = float(round(ing * _SUAVE_DEFICITARIO_FRAC))
+                menu = [{"clave": "suave_10", "nombre": "Ahorro suave (10% de tu ingreso)",
+                         "monto": objetivo,
+                         "descripcion": "Tu perfil tiende a ahorrar: vuelve al equilibrio y guarda un 10% de tu ingreso.",
                          "activa": True}]
             else:
                 escenario = "deficit_significativo_override"
+                objetivo = 0.0  # equilibrio primero; sin escalamiento ni metas ambiciosas
                 menu = []
-            objetivo = 0.0  # equilibrio primero; sin escalamiento ni metas ambiciosas
         else:
             if abs(ahorro) <= umbral:
                 escenario, objetivo, menu = "deficit_bajo", float(ahorro_min), []
@@ -470,9 +499,15 @@ def _plan_objetivo(user: dict, cls: dict, meta: float | None = None,
         menu.append({"clave": "escalamiento", "nombre": "Escalamiento progresivo",
                      "monto": float(candidatos["escalamiento"]),
                      "descripcion": "Promedio de tus últimos 3 meses ×1.25 — sigue tu ritmo de mejora."})
-    menu.append({"clave": "ideal_20", "nombre": "20% de tu ingreso",
-                 "monto": float(candidatos["ideal_20"]),
-                 "descripcion": "Regla 50/30/20: destina una quinta parte de tu ingreso al ahorro."})
+    if perfil_deficitario:
+        menu.append({"clave": "suave_10", "nombre": "Ahorro suave (10% de tu ingreso)",
+                     "monto": float(candidatos["suave_10"]),
+                     "descripcion": "Para tu perfil: un escalón alcanzable sin tocar gastos esenciales "
+                                    "(10% de tu ingreso, o un paso del 5% si aún ahorras poco)."})
+    else:
+        menu.append({"clave": "ideal_20", "nombre": "20% de tu ingreso",
+                     "monto": float(candidatos["ideal_20"]),
+                     "descripcion": "Regla 50/30/20: destina una quinta parte de tu ingreso al ahorro."})
     if candidatos.get("meta_largo_plazo"):
         nombre_meta = candidatos.get("meta_largo_plazo_nombre", "tu meta")
         menu.append({"clave": "meta_largo_plazo", "nombre": f"Meta: {nombre_meta}",
@@ -481,6 +516,10 @@ def _plan_objetivo(user: dict, cls: dict, meta: float | None = None,
 
     if alternativa and candidatos.get(alternativa):
         escenario, objetivo = alternativa, float(candidatos[alternativa])
+    elif perfil_deficitario:
+        # Sin elección explícita, el perfil deficitario avanza por el escalón suave
+        # (antes: escalamiento x1.25 o incremental, más exigentes para este perfil).
+        escenario, objetivo = "suave_10", float(candidatos["suave_10"])
     elif candidatos.get("escalamiento"):
         # Modo 3: 3+ meses cumpliendo meta => escalamiento automático (spec §5).
         escenario, objetivo = "escalamiento", float(candidatos["escalamiento"])
@@ -515,9 +554,13 @@ def _mensaje_especialista(plan: dict, cls: dict) -> str:
                 f"({abs(ahorro) / max(ing, 1.0) * 100:.0f}%). Volvamos a 0 y, ya que estás cerca, "
                 f"intentemos guardar al menos S/. {obj:.0f} — un primer ahorro pequeño pero real." + nota)
     if esc == "deficit_leve_override":
-        return (f"Tu balance este mes es casi neutro (S/. {ahorro:.0f}). Estás muy cerca del "
-                f"equilibrio financiero. Tu perfil tiende a ahorrar, así que consolidar el balance "
-                f"en 0 debería ser un ajuste manejable.")
+        return (f"Tu balance este mes es casi neutro (S/. {ahorro:.0f}) y tu perfil tiende a "
+                f"ahorrar, así que no nos quedamos en el equilibrio: tu meta es guardar "
+                f"S/. {obj:.0f} (10% de tu ingreso), un ajuste manejable para tu perfil.")
+    if esc == "suave_10":
+        return (f"Para tu perfil conviene avanzar suave y sin brusquedades. Este mes ahorraste "
+                f"S/. {ahorro:.0f}; tu meta es S/. {obj:.0f}, un escalón alcanzable recortando solo "
+                f"gastos flexibles: el plan Suave de abajo está pensado para eso." + nota)
     if esc == "deficit_significativo_override":
         return (f"El modelo detecta patrones positivos en tu perfil, pero tu balance real este mes "
                 f"es negativo (S/. {ahorro:.0f}). Te ayudamos a llegar al equilibrio primero, sin "
@@ -599,6 +642,7 @@ def recommend(user: dict, meta: float | None = None, historial: list | None = No
         "categoria_tendencia": cat_tend,        # None si no hay historial con crecimiento
         "categoria_objetivo": cat_lider,         # clave cruda (para persistir anti-estatismo)
         "usa_historial": bool(prioridad),
+        "recomendacion_suave": cls["clase"] == 0,   # la vista adapta el banner de estrategias
     }
 
     if needed <= 1e-6:
@@ -619,6 +663,11 @@ def recommend(user: dict, meta: float | None = None, historial: list | None = No
     # si ninguna lo logra solo con recortes realistas, se recomienda la más completa.
     rec_idx = next((i for i, o in enumerate(opciones) if o["alcanza_meta"]),
                    len(opciones) - 1 if opciones else -1)
+    # Perfil deficitario: la recomendación es SIEMPRE la estrategia más suave (la primera),
+    # aunque no alcance toda la meta; para este perfil lo que importa es empezar con un
+    # cambio sostenible. El banner de la vista explica cuánto cubre y cuál es el siguiente paso.
+    if cls["clase"] == 0 and opciones:
+        rec_idx = 0
     for i, o in enumerate(opciones):
         o["recomendada"] = (i == rec_idx)
 

@@ -384,3 +384,43 @@ class PlanSeleccionado(models.Model):
     @property
     def icono(self):
         return {'Suave': '🌿', 'Equilibrado': '⚖️', 'Decidido': '🚀'}.get(self.nombre_plan, '📋')
+
+
+class AporteMeta(models.Model):
+    """
+    Aporte de una porción del ahorro de un mes hacia una MetaLargoPlazo (spec Tarea 2):
+    tras registrar un mes con ahorro positivo, el usuario reparte ese ahorro entre sus
+    metas activas en vez de dejarlo "suelto". Un registro puede repartirse entre varias
+    metas; una meta puede recibir aportes de varios meses.
+    No se duplica el período en un campo aparte: se usa `aporte.registro.periodo` para
+    mostrarlo (evita inconsistencia si el registro se reasigna).
+    """
+    usuario = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='aportes_meta',
+    )
+    meta = models.ForeignKey(
+        MetaLargoPlazo,
+        on_delete=models.CASCADE,
+        related_name='aportes',
+    )
+    registro = models.ForeignKey(
+        'financiero.RegistroMensual',
+        on_delete=models.CASCADE,
+        related_name='aportes_meta',
+    )
+    monto = models.DecimalField(
+        max_digits=10, decimal_places=2, verbose_name='Monto aportado (S/)',
+        validators=[MinValueValidator(Decimal('0.01'), message='El aporte debe ser mayor a S/ 0.')],
+    )
+    creado_en = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table            = 'recomendaciones_aportemeta'
+        ordering            = ['-creado_en']
+        verbose_name        = 'Aporte a Meta'
+        verbose_name_plural = 'Aportes a Metas'
+
+    def __str__(self):
+        return f'{self.usuario.nickname} → {self.meta.nombre}: S/ {self.monto} ({self.registro.periodo.strftime("%m/%Y")})'

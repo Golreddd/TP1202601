@@ -18,6 +18,12 @@ class RegistroMensualForm(forms.ModelForm):
         widget=forms.DateInput(attrs={**INPUT, 'type': 'month'}),
     )
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # No se pueden registrar meses futuros (ver clean_periodo, que es la validación
+        # real): esto solo bloquea la selección en el picker nativo del navegador.
+        self.fields['periodo'].widget.attrs['max'] = date.today().strftime('%Y-%m')
+
     class Meta:
         model = RegistroMensual
         fields = [
@@ -47,9 +53,15 @@ class RegistroMensualForm(forms.ModelForm):
             raise forms.ValidationError('Este campo es requerido.')
         try:
             parts = value.split('-')
-            return date(int(parts[0]), int(parts[1]), 1)
+            periodo = date(int(parts[0]), int(parts[1]), 1)
         except (ValueError, IndexError, TypeError):
             raise forms.ValidationError('Formato inválido. Selecciona un mes válido.')
+        hoy = date.today()
+        if periodo > date(hoy.year, hoy.month, 1):
+            raise forms.ValidationError(
+                'No puedes registrar un mes futuro. El mes más reciente disponible es el actual.'
+            )
+        return periodo
 
     def clean(self):
         """El ingreso total del mes debe ser > 0.

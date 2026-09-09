@@ -75,6 +75,50 @@ def _racha_metas_mensuales_cumplidas(usuario) -> int:
     return racha
 
 
+def _racha_plan_cumplido(usuario) -> int:
+    """Cuenta cuántos meses consecutivos, del más reciente hacia atrás, el usuario
+    cumplió el plan de recorte que tiene activo — mismo criterio de 'cumple' (10% de
+    tolerancia) que ya usa gamificacion/views.py::progreso, vía la única fuente en
+    recomendaciones.trends.comparacion_plan (no se reinventa el umbral aquí)."""
+    from recomendaciones.models import PlanSeleccionado
+    from recomendaciones.trends import comparacion_plan
+
+    plan_activo = PlanSeleccionado.objects.filter(
+        usuario=usuario, activo=True
+    ).select_related('resultado__registro').first()
+    if not plan_activo:
+        return 0
+
+    filas = comparacion_plan(usuario, plan_activo)  # orden ascendente por periodo
+    racha = 0
+    for fila in reversed(filas):
+        if fila['cumple']:
+            racha += 1
+        else:
+            break
+    return racha
+
+
+def _racha_aportes_consecutivos(usuario) -> int:
+    """Cuenta cuántos meses CALENDARIO consecutivos, del más reciente hacia atrás, el
+    usuario aportó ahorro a alguna meta (APORTES_CONSTANTES). Un mes cuenta si tiene al
+    menos un AporteMeta cuyo registro.periodo es ese mes; se corta en el primer hueco."""
+    from recomendaciones.models import AporteMeta
+
+    periodos_con_aporte = set(
+        AporteMeta.objects.filter(usuario=usuario).values_list('registro__periodo', flat=True)
+    )
+    if not periodos_con_aporte:
+        return 0
+
+    racha = 0
+    periodo = max(periodos_con_aporte)
+    while periodo in periodos_con_aporte:
+        racha += 1
+        periodo = _mes_anterior(periodo)
+    return racha
+
+
 def verificar_y_otorgar_logros(usuario, contexto: str = '') -> list:
     """
     Evalúa el estado del usuario y desbloquea los logros que merezca.
@@ -108,6 +152,12 @@ def verificar_y_otorgar_logros(usuario, contexto: str = '') -> list:
 
         if total >= 5 and _otorgar(usuario, 'CINCO_REGISTROS'):
             nuevos.append('CINCO_REGISTROS')
+        if total >= 10 and _otorgar(usuario, 'DIEZ_REGISTROS'):
+            nuevos.append('DIEZ_REGISTROS')
+        if total >= 20 and _otorgar(usuario, 'VEINTE_REGISTROS'):
+            nuevos.append('VEINTE_REGISTROS')
+        if total >= 50 and _otorgar(usuario, 'CINCUENTA_REGISTROS'):
+            nuevos.append('CINCUENTA_REGISTROS')
 
         # Rachas
         try:
@@ -116,6 +166,10 @@ def verificar_y_otorgar_logros(usuario, contexto: str = '') -> list:
                 nuevos.append('RACHA_7')
             if racha.dias_consecutivos >= 30 and _otorgar(usuario, 'RACHA_30'):
                 nuevos.append('RACHA_30')
+            if racha.dias_consecutivos >= 60 and _otorgar(usuario, 'RACHA_60'):
+                nuevos.append('RACHA_60')
+            if racha.dias_consecutivos >= 90 and _otorgar(usuario, 'RACHA_90'):
+                nuevos.append('RACHA_90')
         except Exception:
             pass
 
@@ -144,6 +198,10 @@ def verificar_y_otorgar_logros(usuario, contexto: str = '') -> list:
 
         if total_ml >= 1 and _otorgar(usuario, 'PRIMER_ML'):
             nuevos.append('PRIMER_ML')
+        if total_ml >= 5 and _otorgar(usuario, 'CINCO_ML'):
+            nuevos.append('CINCO_ML')
+        if total_ml >= 10 and _otorgar(usuario, 'DIEZ_ML'):
+            nuevos.append('DIEZ_ML')
 
         # Clasificado como "Ahorra" (clase 1) por el XGBoost Classifier
         ultimo_ml = usuario.resultados_ml.order_by('-creado_en').first()
@@ -151,6 +209,21 @@ def verificar_y_otorgar_logros(usuario, contexto: str = '') -> list:
                 and ultimo_ml.clase_predicha == 1
                 and _otorgar(usuario, 'CLUSTER_AHORRADOR')):
             nuevos.append('CLUSTER_AHORRADOR')
+
+    # ── Logros de PLAN (leídos del historial, sin disparador dedicado) ────────
+    # No hay una vista/acción "adoptar plan" que llame a este servicio (PlanSeleccionado
+    # se crea desde la API de ML Insights). En vez de agregar un disparador nuevo ahí,
+    # se leen aquí de forma pasiva —PlanSeleccionado y comparacion_plan ya son el
+    # historial completo— aprovechando que 'registro' y 'ml' son los contextos que más
+    # seguido se disparan durante el uso normal de la app.
+    if contexto in ('registro', 'ml'):
+        from recomendaciones.models import PlanSeleccionado
+
+        if PlanSeleccionado.objects.filter(usuario=usuario).exists() and _otorgar(usuario, 'PRIMER_PLAN'):
+            nuevos.append('PRIMER_PLAN')
+
+        if _racha_plan_cumplido(usuario) >= 3 and _otorgar(usuario, 'PLAN_3_MESES'):
+            nuevos.append('PLAN_3_MESES')
 
     # ── Logros de METAS ───────────────────────────────────────────────────────
     # 'meta_completada' lo disparan meta_create / meta_update (web) y la API.
@@ -170,5 +243,27 @@ def verificar_y_otorgar_logros(usuario, contexto: str = '') -> list:
 
         if completadas >= 5 and _otorgar(usuario, 'MAESTRO_AHORRO'):
             nuevos.append('MAESTRO_AHORRO')
+
+        # A mitad de camino: al menos una meta activa (no completada) con >=50% avance.
+        # Se reutiliza el umbral de porcentaje vía F() en la propia query, sin recalcular
+        # la propiedad `porcentaje` del modelo (equivalente: actual >= objetivo * 0.5).
+        if metas.filter(
+            monto_actual__gte=F('monto_objetivo') * 0.5,
+            monto_actual__lt=F('monto_objetivo'),
+        ).exists() and _otorgar(usuario, 'META_MITAD'):
+            nuevos.append('META_MITAD')
+
+        if metas.count() >= 3 and _otorgar(usuario, 'TRES_METAS_ACTIVAS'):
+            nuevos.append('TRES_METAS_ACTIVAS')
+
+        # Aportes a metas (Tarea 2): disparado por financiero.distribuir_ahorro justo
+        # después de crear los AporteMeta del mes.
+        from recomendaciones.models import AporteMeta
+
+        if AporteMeta.objects.filter(usuario=usuario).exists() and _otorgar(usuario, 'APORTE_A_META'):
+            nuevos.append('APORTE_A_META')
+
+        if _racha_aportes_consecutivos(usuario) >= 3 and _otorgar(usuario, 'APORTES_CONSTANTES'):
+            nuevos.append('APORTES_CONSTANTES')
 
     return nuevos

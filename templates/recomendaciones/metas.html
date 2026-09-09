@@ -45,6 +45,7 @@
       <div class="badge badge-green" style="margin-top:10px;">✓ Completada</div>
     {% endif %}
     <div class="flex gap-2 mt-4">
+      <a href="{% url 'recomendaciones:meta_detalle' meta.pk %}" class="btn btn-sm btn-outline" style="flex:1;justify-content:center;">👁️ Ver Detalle</a>
       <a href="{% url 'recomendaciones:meta_update' meta.pk %}" class="btn btn-sm btn-outline" style="flex:1;justify-content:center;">✏️ Editar</a>
       <a href="{% url 'recomendaciones:meta_delete' meta.pk %}" class="btn btn-sm btn-danger" style="flex:1;justify-content:center;">🗑️</a>
     </div>

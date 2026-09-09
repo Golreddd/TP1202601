@@ -21,14 +21,6 @@ Usado por ml_insights.html y historial_detalle.html.
     Probabilidad de ahorrar: <strong>{% widthratio ultimo.prob_ahorra 1 100 %}%</strong>
     · Confianza: <strong>{{ ultimo.confianza }}</strong>
   </div>
-  <div class="text-xs text-muted mt-2" style="max-width:480px;margin-left:auto;margin-right:auto;">
-    Esto NO es el resultado exacto del mes (eso es la resta ingreso − gasto de abajo): es tu
-    <strong>tendencia estructural</strong> según ingresos, perfil y gastos comprometidos.
-  </div>
-  <div class="text-sm mt-2">
-    Resultado real de ese mes (ingreso − gasto):
-    <strong class="{% if refreg.ahorro_bruto >= 0 %}text-success{% else %}text-danger{% endif %}">S/ {{ refreg.ahorro_bruto|floatformat:0 }}</strong>
-  </div>
   {% if esAhorra and refreg.ahorro_bruto < 0 %}
   <div style="margin-top:14px;background:rgba(245,158,11,.15);border:1px solid rgba(245,158,11,.4);border-radius:8px;padding:10px 14px;font-size:13px;color:#92400e;max-width:520px;margin-left:auto;margin-right:auto;text-align:left;">
     ⚠️ Tu perfil tiende a ahorrar, pero en ese mes tus gastos superaron tus ingresos — por eso la
@@ -145,11 +137,13 @@ Usado por ml_insights.html y historial_detalle.html.
 <div class="card mb-6">
   <div class="card-header mb-4"><div class="card-title">📊 Factores que Influyen en tu Perfil</div></div>
   <div class="card-body" style="padding-top:0;">
-    <div class="text-xs text-muted mb-3">
-      Cada factor empuja tu perfil hacia <span style="color:#059669;font-weight:700;">↑ Ahorra</span>
-      o <span style="color:#dc2626;font-weight:700;">↓ Déficit</span>, con su peso relativo dentro
-      del diagnóstico. Los <span style="color:#0369a1;font-weight:700;">accionables</span> los puedes
-      optimizar; los estructurales (ingreso/perfil) no se ajustan en un mes.
+    <!-- Resumen en una línea: cuál es tu mayor palanca (renderizado por JS) -->
+    <div id="shapResumen" class="mb-3"></div>
+    <!-- Incentivo: cuánto sube tu probabilidad de ahorrar si aplicas el plan (JS) -->
+    <div id="shapIncentivo" class="mb-3"></div>
+    <div class="text-xs text-muted mb-2">
+      Peso de cada factor en tu diagnóstico (% del total). Verde = te acerca a ahorrar,
+      rojo = te empuja al déficit. Primero los que <strong style="color:#0369a1;">sí puedes mover este mes</strong>.
     </div>
     <div class="chart-container" style="height:220px;">
       <canvas id="shapChart"></canvas>

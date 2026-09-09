@@ -11,4 +11,5 @@ urlpatterns = [
     path('metas/nueva/',                views.meta_create,   name='meta_create'),
     path('metas/<int:pk>/editar/',      views.meta_update,   name='meta_update'),
     path('metas/<int:pk>/eliminar/',    views.meta_delete,   name='meta_delete'),
+    path('metas/<int:pk>/',             views.meta_detalle,  name='meta_detalle'),
 ]

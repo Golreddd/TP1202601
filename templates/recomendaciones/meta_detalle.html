@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% load l10n %}
+{% block title %}{{ meta.nombre }}{% endblock %}
+{% block page_title %}{{ meta.nombre }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <div class="page-title">{{ meta.icono }} {{ meta.nombre }}</div>
+    <div class="page-sub">Detalle de la meta y aportes recibidos</div>
+  </div>
+  <a href="{% url 'recomendaciones:metas' %}" class="btn btn-sm btn-outline">← Volver</a>
+</div>
+
+<div class="card mb-6">
+  <div class="card-body">
+    <div class="goal-amounts mb-2">
+      <span>S/ {{ meta.monto_actual|floatformat:0 }} ahorrado</span>
+      <span class="font-bold">S/ {{ meta.monto_objetivo|floatformat:0 }}</span>
+    </div>
+    <div class="progress-bar goal-bar" style="background:#fca5a5;">
+      <div class="progress-fill" style="width:{{ meta.porcentaje|unlocalize }}%;background:linear-gradient(90deg,#059669,#10b981);"></div>
+    </div>
+    <div class="goal-pct mt-2">{{ meta.porcentaje }}%</div>
+    {% if meta.fecha_limite %}
+      <div class="goal-deadline mt-2">📅 Meta: {{ meta.fecha_limite|date:"F Y"|capfirst }}</div>
+    {% endif %}
+    {% if meta.completada %}
+      <div class="badge badge-green" style="margin-top:10px;">✓ Completada</div>
+    {% endif %}
+    <div class="flex gap-2 mt-4">
+      <a href="{% url 'recomendaciones:meta_update' meta.pk %}" class="btn btn-sm btn-outline" style="flex:1;justify-content:center;">✏️ Editar</a>
+      <a href="{% url 'recomendaciones:meta_delete' meta.pk %}" class="btn btn-sm btn-danger" style="flex:1;justify-content:center;">🗑️</a>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header mb-4">
+    <div class="card-title">Aportes recibidos <span class="text-sm text-muted">({{ aportes|length }} en total)</span></div>
+  </div>
+  <div class="card-body" style="padding-top:0;">
+    {% if aportes %}
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Mes</th><th>Monto</th></tr></thead>
+        <tbody>
+          {% for a in aportes %}
+          <tr>
+            <td>{{ a.registro.periodo|date:"M Y"|capfirst }}</td>
+            <td class="text-success font-bold">S/ {{ a.monto|floatformat:0 }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div style="text-align:center;padding:20px 0;">
+      <p style="color:var(--text2);font-size:13px;">
+        Aún no has repartido ningún ahorro mensual hacia esta meta.
+      </p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

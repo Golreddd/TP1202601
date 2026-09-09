@@ -65,12 +65,26 @@ def ml_insights(request):
     # Se serializan con json.dumps para evitar el problema de formato de
     # decimales por el locale es-PE al inyectarlos en JS.
     from recomendaciones.trends import es_mes_atipico
+    from src.predict import classify, objetivo_suave_deficitario
+
+    def _perfil_y_meta_suave(r):
+        """Perfil (0=deficitario) y meta suave por registro, para que el menú de metas
+        ofrezca la tarjeta "Ahorro suave" con el MISMO monto que resolverá el servidor."""
+        d = r.to_user_dict()
+        try:
+            deficitario = classify(d)['clase'] == 0
+        except Exception:
+            deficitario = False
+        return deficitario, objetivo_suave_deficitario(d)
+
     registros_qs = RegistroMensual.objects.filter(
         usuario=request.user
     ).order_by('-periodo')
     registros_js = json.dumps([
         {
             'id':          r.id,
+            'perfilDeficitario': perfil_suave[0],
+            'suave10':     perfil_suave[1],
             'mes':         MESES_ES.get(r.periodo.month, ''),
             'anio':        r.periodo.year,
             'ingTotal':    round(r.ing_total, 2),
@@ -83,6 +97,7 @@ def ml_insights(request):
             'esAtipico':   es_mes_atipico(r),
         }
         for r in registros_qs
+        for perfil_suave in [_perfil_y_meta_suave(r)]   # una sola clasificación por registro
     ], ensure_ascii=False)
 
     # Mes de referencia del último análisis: se pre-selecciona en el formulario
@@ -249,13 +264,28 @@ def meta_update(request, pk):
             messages.success(request, '✅ Meta actualizada correctamente.')
             return redirect('recomendaciones:metas')
     else:
-        form = MetaLargoPlazoForm(instance=meta)
+        form = MetaLargoPlazoForm(
+            instance=meta,
+            initial={'fecha_limite': meta.fecha_limite.strftime('%Y-%m') if meta.fecha_limite else ''},
+        )
 
     return render(request, 'recomendaciones/meta_form.html', {
         'form':        form,
         'meta':        meta,
         'es_creacion': False,
         'titulo':      f'Editar Meta — {meta.nombre}',
+    })
+
+
+@login_required
+def meta_detalle(request, pk):
+    """GET /recomendaciones/metas/<pk>/ — Spec Tarea 2.5: datos de la meta + historial
+    de aportes recibidos (mes de origen y monto), más reciente primero."""
+    meta = get_object_or_404(MetaLargoPlazo, pk=pk, usuario=request.user)
+    aportes = meta.aportes.select_related('registro').order_by('-registro__periodo')
+    return render(request, 'recomendaciones/meta_detalle.html', {
+        'meta':    meta,
+        'aportes': aportes,
     })
 
 

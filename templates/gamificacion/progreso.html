@@ -88,8 +88,18 @@
       </div>
       <div class="text-xs text-muted mb-4">
         Lo gastado vs. lo sugerido por tu plan <strong>{{ plan_activo.nombre_plan }}</strong>.
-        Solo es referencia: no genera alertas ni notificaciones.
       </div>
+      {% if alerta_presupuesto %}
+      <div class="msg-alert msg-{{ alerta_presupuesto.nivel }} mb-4">
+        {% if alerta_presupuesto.nivel == 'success' %}✅{% elif alerta_presupuesto.nivel == 'error' %}❌{% else %}⚠️{% endif %}
+        <span>
+          {{ alerta_presupuesto.mensaje }}
+          {% if alerta_presupuesto.nivel == 'error' %}
+            <a href="{% url 'recomendaciones:ml_insights' %}" style="color:inherit;font-weight:700;text-decoration:underline;margin-left:4px;">Regenerar plan →</a>
+          {% endif %}
+        </span>
+      </div>
+      {% endif %}
       <div class="budget-grid">
         {% for c in presupuesto_categorias %}
         <div class="budget-card {% if c.excedido %}over{% else %}ok{% endif %}">
