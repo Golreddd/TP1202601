@@ -9,4 +9,6 @@ urlpatterns = [
     path('usuarios/<int:pk>/estado/',       views.user_toggle_active, name='user_toggle'),
     path('actividad/',                      views.activity_log,      name='activity'),
     path('metricas/',                       views.metrics_view,      name='metrics'),
+    path('validacion-ml/',                  views.validacion_ml,     name='validacion_ml'),
+    path('validacion-ml/exportar/',         views.validacion_ml_export, name='validacion_ml_export'),
 ]

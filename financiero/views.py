@@ -76,11 +76,38 @@ def dashboard(request):
     metas    = MetaLargoPlazo.objects.filter(usuario=request.user, activa=True).order_by('-creado_en')[:3]
     ultimo_ml = ResultadoML.objects.filter(usuario=request.user).order_by('-creado_en').first()
 
+    # ── Cómo vamos frente a la meta de ahorro de este mes ─────────────────────
+    # El monto objetivo es el que ya resolvió el motor al ejecutar el análisis
+    # (meta_validada); aquí solo se compara contra el ahorro real del mes para
+    # resumirlo en el panel, sin volver a calcular ninguna regla del motor.
+    meta_mes = float(ultimo_ml.meta_validada) if ultimo_ml else None
+    avance_meta = None
+    if meta_mes and meta_mes > 0 and ultimo:
+        ahorro = float(ultimo.ahorro_bruto)
+        falta = max(meta_mes - ahorro, 0.0)
+        if ahorro < 0:
+            estado, mensaje = 'deficit', 'Este mes gastaste más de lo que ingresó: la prioridad es volver al equilibrio.'
+        elif ahorro >= meta_mes:
+            estado, mensaje = 'cumplida', '¡Ya alcanzaste tu meta de ahorro de este mes! Mantén el ritmo.'
+        elif ahorro >= meta_mes * 0.5:
+            estado, mensaje = 'cerca', f'Vas por buen camino: te faltan S/ {falta:.0f} para cerrar tu meta del mes.'
+        else:
+            estado, mensaje = 'lejos', f'Tu ahorro cubre menos de la mitad de tu meta: te faltan S/ {falta:.0f}.'
+        avance_meta = {
+            'meta':      round(meta_mes, 2),
+            'ahorro':    round(ahorro, 2),
+            'falta':     round(falta, 2),
+            'pct':       min(round(ahorro / meta_mes * 100, 1), 100) if ahorro > 0 else 0,
+            'estado':    estado,
+            'mensaje':   mensaje,
+        }
+
     return render(request, 'financiero/dashboard.html', {
         'ultimo':          ultimo,
         'registros':       registros_qs,
         'metas':           metas,
         'ultimo_ml':       ultimo_ml,
+        'avance_meta':     avance_meta,
         'meses_labels':    meses_labels,
         'ingresos_data':   ingresos_data,
         'gastos_data':     gastos_data,

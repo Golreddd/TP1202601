@@ -3,7 +3,15 @@
 {% block title %}Dashboard{% endblock %}
 {% block page_title %}Dashboard{% endblock %}
 
+{% comment %}
+Panel principal: pensado para leerse COMPLETO en una sola pantalla, sin desplazarse.
+Cada bloque es un enlace a la pantalla donde ese dato se analiza a fondo (clase
+.dash-link), y los tamaños reducidos vienen de la clase .dash en sigamos.css.
+{% endcomment %}
+
 {% block content %}
+<div class="dash">
+
 <!-- Cabecera -->
 <div class="page-header">
   <div>
@@ -15,151 +23,147 @@
 
 {% if tiene_datos %}
 
-<!-- ===== STAT CARDS ===== -->
+<!-- ===== INDICADORES DEL MES (cada uno lleva a su detalle) ===== -->
 <div class="stats-grid mb-6">
-  <div class="stat-card blue">
-    <div class="stat-icon">💰</div>
-    <div class="stat-label">Ingreso Mensual</div>
-    <div class="stat-value">S/ {{ ultimo.ing_total|floatformat:0 }}</div>
-    <div class="stat-change">Planilla + Informal</div>
-  </div>
-  <div class="stat-card green">
-    <div class="stat-icon">💳</div>
-    <div class="stat-label">Gastos del Mes</div>
-    <div class="stat-value">S/ {{ ultimo.gasto_total|floatformat:0 }}</div>
-    <div class="stat-change">Total 8 categorías</div>
-  </div>
-  <div class="stat-card orange">
-    <div class="stat-icon">🏦</div>
-    <div class="stat-label">Ahorro Actual</div>
-    <div class="stat-value">S/ {{ ultimo.ahorro_bruto|floatformat:0 }}</div>
-    <div class="stat-change {% if ultimo.ahorro_bruto > 0 %}up{% else %}down{% endif %}">
-      {% if ultimo.ahorro_bruto > 0 %}▲{% else %}▼{% endif %}
-      {{ ultimo.tasa_ahorro }}% tasa de ahorro
+  <a href="{% url 'financiero:registro_list' %}" class="dash-link">
+    <div class="stat-card blue">
+      <div class="stat-icon">💰</div>
+      <div class="stat-label">Ingreso Mensual</div>
+      <div class="stat-value">S/ {{ ultimo.ing_total|floatformat:0 }}</div>
+      <div class="stat-change">Planilla + Informal</div>
     </div>
-  </div>
-  <div class="stat-card purple">
-    <div class="stat-icon">📋</div>
-    <div class="stat-label">Registros Totales</div>
-    <div class="stat-value">{{ registros|length }}</div>
-    <div class="stat-change">Últimos 6 meses</div>
-  </div>
-</div>
-
-<!-- ===== GRÁFICOS ===== -->
-<div class="grid-cols-3-1 mb-6">
-  <div class="card">
-    <div class="card-header">
-      <div class="card-title">Ingresos vs Gastos</div>
-      <span class="tag">Últimos {{ registros|length }} meses</span>
+  </a>
+  <a href="{% url 'financiero:analisis' %}" class="dash-link">
+    <div class="stat-card green">
+      <div class="stat-icon">💳</div>
+      <div class="stat-label">Gastos del Mes</div>
+      <div class="stat-value">S/ {{ ultimo.gasto_total|floatformat:0 }}</div>
+      <div class="stat-change">Total 8 categorías</div>
     </div>
-    <div class="card-body">
-      <div class="chart-container">
-        <canvas id="dashBarChart"></canvas>
+  </a>
+  <a href="{% url 'gamificacion:progreso' %}" class="dash-link">
+    <div class="stat-card orange">
+      <div class="stat-icon">🏦</div>
+      <div class="stat-label">Ahorro Actual</div>
+      <div class="stat-value">S/ {{ ultimo.ahorro_bruto|floatformat:0 }}</div>
+      <div class="stat-change {% if ultimo.ahorro_bruto > 0 %}up{% else %}down{% endif %}">
+        {% if ultimo.ahorro_bruto > 0 %}▲{% else %}▼{% endif %}
+        {{ ultimo.tasa_ahorro }}% tasa de ahorro
       </div>
     </div>
-  </div>
-  <div class="card">
-    <div class="card-header">
-      <div class="card-title">Distribución de Gastos</div>
+  </a>
+  <a href="{% url 'financiero:registro_list' %}" class="dash-link">
+    <div class="stat-card purple">
+      <div class="stat-icon">📋</div>
+      <div class="stat-label">Registros Totales</div>
+      <div class="stat-value">{{ registros|length }}</div>
+      <div class="stat-change">Últimos 6 meses</div>
     </div>
-    <div class="card-body">
-      <div class="chart-container">
-        <canvas id="dashPieChart"></canvas>
-      </div>
-    </div>
-  </div>
+  </a>
 </div>
 
-<!-- ===== METAS + INSIGHTS ===== -->
+<!-- ===== GRÁFICOS (los tres llevan al análisis detallado) ===== -->
+<div class="grid-3 mb-6">
+  <a href="{% url 'financiero:analisis' %}" class="dash-link">
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">Ingresos vs Gastos</div>
+        <span class="dash-ir">Ver →</span>
+      </div>
+      <div class="card-body"><div class="chart-container"><canvas id="dashBarChart"></canvas></div></div>
+    </div>
+  </a>
+  <a href="{% url 'financiero:analisis' %}" class="dash-link">
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">Tendencia Mensual de Gastos</div>
+        <span class="dash-ir">Ver →</span>
+      </div>
+      <div class="card-body"><div class="chart-container"><canvas id="dashTrendChart"></canvas></div></div>
+    </div>
+  </a>
+  <a href="{% url 'financiero:analisis' %}" class="dash-link">
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">Distribución de Gastos</div>
+        <span class="dash-ir">Ver →</span>
+      </div>
+      <div class="card-body"><div class="chart-container"><canvas id="dashPieChart"></canvas></div></div>
+    </div>
+  </a>
+</div>
+
+<!-- ===== METAS DE AHORRO + RECOMENDACIÓN DEL MES ===== -->
 <div class="grid-2">
 
-  <!-- Metas de ahorro -->
-  <div class="card">
-    <div class="card-header mb-4">
-      <div class="card-title">Progreso de Metas</div>
-      <a href="{% url 'recomendaciones:metas' %}" class="btn btn-sm btn-outline">Ver todas</a>
-    </div>
-    <div class="card-body" style="padding-top:0;">
-      {% if metas %}
-        {% for meta in metas %}
-          <div style="margin-bottom:18px;">
-            <div class="flex flex-center justify-between mb-4">
-              <span class="font-semi text-sm">{{ meta.icono }} {{ meta.nombre }}</span>
-              <span class="font-bold text-primary">{{ meta.porcentaje }}%</span>
+  <!-- Avance de las metas a largo plazo -->
+  <a href="{% url 'recomendaciones:metas' %}" class="dash-link">
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">🎯 Mis Metas de Ahorro</div>
+        <span class="dash-ir">Ver todas →</span>
+      </div>
+      <div class="card-body">
+        {% if metas %}
+          {% for meta in metas %}
+          <div class="dash-meta-row">
+            <span class="dash-meta-ico">{{ meta.icono }}</span>
+            <div class="dash-meta-txt">
+              <div class="dash-meta-nom">{{ meta.nombre }}</div>
+              <!-- Rojo = tramo pendiente, verde = ya ahorrado (spec §8.4) -->
+              <div class="dash-meta-bar"><span style="width:{{ meta.porcentaje|unlocalize }}%;"></span></div>
             </div>
-            <!-- Spec §8.4: verde = ya ahorrado, rojo = tramo pendiente (recalculado en
-                 cada carga vía las propiedades dinámicas del modelo, nunca fijo).
-                 Colores inline a propósito (no solo la clase CSS) para que se vean
-                 siempre, sin depender de que el navegador recargue la hoja de estilos. -->
-            <div class="progress-bar goal-bar" style="background:#fca5a5;">
-              <div class="progress-fill" style="width:{{ meta.porcentaje|unlocalize }}%;background:linear-gradient(90deg,#059669,#10b981);"></div>
-            </div>
-            <div class="text-xs text-muted mt-4">
-              S/ {{ meta.monto_actual|floatformat:0 }} de S/ {{ meta.monto_objetivo|floatformat:0 }}
-              {% if meta.cuota_mensual_sugerida %}
-                · S/ {{ meta.cuota_mensual_sugerida|floatformat:0 }}/mes para cumplirla a tiempo
-                {% if meta.desviacion_plazo == 'atrasado' %}<span class="text-danger">(vas atrasado)</span>
-                {% elif meta.desviacion_plazo == 'adelantado' %}<span class="text-success">(vas adelantado)</span>{% endif %}
-              {% endif %}
-            </div>
+            <span class="dash-meta-pct">{{ meta.porcentaje }}%</span>
           </div>
-        {% endfor %}
-      {% else %}
-        <div class="empty-state">
-          <div class="empty-icon">🎯</div>
-          <h3>Sin metas activas</h3>
-          <p><a href="{% url 'recomendaciones:meta_create' %}">Crea tu primera meta de ahorro</a></p>
-        </div>
-      {% endif %}
+          {% endfor %}
+        {% else %}
+          <div style="text-align:center;padding:14px 0;color:var(--text2);font-size:12.5px;">
+            <div style="font-size:26px;margin-bottom:6px;">🎯</div>
+            Aún no tienes metas de ahorro. Crea la primera para seguir su avance aquí.
+          </div>
+        {% endif %}
+      </div>
     </div>
-  </div>
+  </a>
 
-  <!-- ML Insight -->
-  <div class="card">
-    <div class="card-header mb-4">
-      <div class="card-title">💡 SmartSave Insights</div>
+  <!-- Cuánto debes ahorrar este mes y cómo vas -->
+  <a href="{% url 'recomendaciones:ml_insights' %}" class="dash-link">
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">💡 Tu Meta de Este Mes</div>
+        <span class="dash-ir">Ver análisis →</span>
+      </div>
+      <div class="card-body">
+        {% if avance_meta %}
+          <div class="flex flex-center justify-between mb-2">
+            <div>
+              <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;">Debes ahorrar</div>
+              <div style="font-size:23px;font-weight:800;color:var(--text);">S/ {{ avance_meta.meta|floatformat:0 }}</div>
+            </div>
+            <div style="text-align:right;">
+              <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;">Llevas</div>
+              <div style="font-size:23px;font-weight:800;
+                          color:{% if avance_meta.estado == 'cumplida' %}var(--accent-dark){% elif avance_meta.estado == 'deficit' %}var(--danger){% else %}var(--primary){% endif %};">
+                {{ avance_meta.pct|floatformat:0 }}%
+              </div>
+            </div>
+          </div>
+          <div class="progress-bar" style="height:7px;">
+            <div class="progress-fill {% if avance_meta.estado == 'cumplida' %}green{% elif avance_meta.estado == 'deficit' %}red{% else %}blue{% endif %}"
+                 style="width:{{ avance_meta.pct|unlocalize }}%;"></div>
+          </div>
+          <div style="margin-top:9px;font-size:12.5px;line-height:1.45;color:var(--text2);">
+            {{ avance_meta.mensaje }}
+          </div>
+        {% else %}
+          <div style="text-align:center;padding:14px 0;color:var(--text2);font-size:12.5px;">
+            <div style="font-size:26px;margin-bottom:6px;">🤖</div>
+            Ejecuta tu análisis para saber cuánto te conviene ahorrar este mes.
+          </div>
+        {% endif %}
+      </div>
     </div>
-    <div class="card-body" style="padding-top:0;">
-      {% if ultimo_ml %}
-        <div class="insight-card">
-          <div class="insight-header">
-            <div class="insight-icon {% if ultimo_ml.clase_predicha %}green{% else %}orange{% endif %}">🤖</div>
-            <div class="insight-title">Último análisis ML — {{ ultimo_ml.label_predicha }}</div>
-          </div>
-          <div class="insight-text">
-            Ahorro real: <strong>S/ {{ ultimo_ml.ahorro_actual|floatformat:0 }}</strong> ·
-            Meta: <strong>S/ {{ ultimo_ml.meta_validada|floatformat:0 }}</strong>
-          </div>
-        </div>
-        <div class="insight-card">
-          <div class="insight-header">
-            <div class="insight-icon blue">📊</div>
-            <div class="insight-title">Tasa de ahorro — {{ ultimo.tasa_ahorro }}%</div>
-          </div>
-          <div class="insight-text">
-            {% if ultimo.tasa_ahorro >= 20 %}
-              ¡Excelente! Superas el 20% recomendado. Sigue así.
-            {% elif ultimo.tasa_ahorro >= 10 %}
-              Vas bien, pero puedes mejorar. Meta: superar el 20%.
-            {% else %}
-              Tu ahorro es bajo. Revisa gastos en ML Insights.
-            {% endif %}
-          </div>
-        </div>
-        <a href="{% url 'recomendaciones:ml_insights' %}" class="btn btn-accent btn-sm btn-full mt-4">
-          Ver ML Insights completo
-        </a>
-      {% else %}
-        <div class="empty-state">
-          <div class="empty-icon">🤖</div>
-          <h3>Sin análisis ML aún</h3>
-          <p style="margin-bottom:12px;">Ejecuta tu primer análisis para obtener recomendaciones personalizadas.</p>
-          <a href="{% url 'recomendaciones:ml_insights' %}" class="btn btn-accent btn-sm">Ir a ML Insights</a>
-        </div>
-      {% endif %}
-    </div>
-  </div>
+  </a>
 
 </div>
 
@@ -171,11 +175,13 @@
   <div class="page-sub" style="margin-bottom:28px;">
     Crea tu primer registro mensual para comenzar a visualizar tu salud financiera.
   </div>
-  <a href="{% url 'financiero:registro_create' %}" class="btn btn-primary" style="width:auto;display:inline-flex;">
+  <a href="{% url 'financiero:registro_create' %}" class="btn btn-primary" style="display:inline-flex;">
     + Crear mi primer registro
   </a>
 </div>
 {% endif %}
+
+</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -189,6 +195,8 @@ const gastosVals   = {{ gastos_valores|safe }};
 document.addEventListener('DOMContentLoaded', () => {
   if (mesesLabels.length) {
     mkBar('dashBarChart', mesesLabels, ingresosData, gastosData);
+    // Misma serie de gasto mensual que el Análisis de Gastos, en formato de línea.
+    mkLine('dashTrendChart', mesesLabels, gastosData, 'Gastos');
   }
   if (gastosVals.length) {
     mkDoughnut('dashPieChart', gastosLabels, gastosVals);

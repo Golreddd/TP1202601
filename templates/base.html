@@ -6,7 +6,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{% block title %}SmartSave{% endblock %} — Plataforma Financiera Inteligente</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-<link rel="stylesheet" href="{% static 'css/sigamos.css' %}?v=5">
+<link rel="stylesheet" href="{% static 'css/sigamos.css' %}?v=6">
 {% block extra_css %}{% endblock %}
 </head>
 <body>
@@ -87,6 +87,10 @@
         {% url 'panel_admin:activity' as url_admin_act %}
         <a href="{{ url_admin_act }}" class="nav-item {% if '/actividad' in request.path %}active{% endif %}">
           <span class="nav-icon">📋</span> Actividad
+        </a>
+        {% url 'panel_admin:validacion_ml' as url_admin_val %}
+        <a href="{{ url_admin_val }}" class="nav-item {% if '/validacion-ml' in request.path %}active{% endif %}">
+          <span class="nav-icon">🧪</span> Validación ML
         </a>
         {% url 'panel_admin:metrics' as url_admin_met %}
         <a href="{{ url_admin_met }}" class="nav-item {% if '/metricas' in request.path %}active{% endif %}">

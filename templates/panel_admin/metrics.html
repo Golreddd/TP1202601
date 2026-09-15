@@ -38,6 +38,27 @@
   </div>
 </div>
 
+<!-- Validación con usuarios reales -->
+<div class="card mb-6">
+  <div class="card-header">
+    <div class="card-title">🧪 Validación ML con usuarios reales</div>
+    <a href="{% url 'panel_admin:validacion_ml' %}" class="btn btn-sm btn-outline">Ver detalle</a>
+  </div>
+  <div class="card-body">
+    {% if validacion.n %}
+      <div class="flex flex-center" style="gap:24px;flex-wrap:wrap;">
+        <div><div class="text-sm text-muted">Casos</div><div class="font-bold text-primary" style="font-size:1.4rem;">{{ validacion.n }}</div></div>
+        <div><div class="text-sm text-muted">Accuracy real</div><div class="font-bold text-primary" style="font-size:1.4rem;">{{ validacion.accuracy }}%</div></div>
+        <div><div class="text-sm text-muted">Aciertos</div><span class="badge badge-green">{{ validacion.aciertos }}</span></div>
+        <div><div class="text-sm text-muted">Errores</div><span class="badge badge-red">{{ validacion.errores }}</span></div>
+        <div><div class="text-sm text-muted">TP / FP / TN / FN</div><div class="font-semi">{{ validacion.tp }} / {{ validacion.fp }} / {{ validacion.tn }} / {{ validacion.fn }}</div></div>
+      </div>
+    {% else %}
+      <div class="text-sm text-muted">Aún no hay casos: se generan con el primer análisis ML de cada usuario.</div>
+    {% endif %}
+  </div>
+</div>
+
 <!-- Distribución por clasificación (Ahorra / Déficit) -->
 {% if not clase_dist %}
 <div class="card">

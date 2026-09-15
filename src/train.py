@@ -4,7 +4,7 @@ Entrenamiento de SmartSave — XGBoost Classifier binario (Déficit / Ahorra).
 
 Pipeline ÚNICO y honesto (sin K-Means, sin regresión):
   1. dataset2.csv -> limpieza (ingreso>0 + dedup + IQR 2.5) -> features honestas.
-  2. Split ESTRATIFICADO 70/20/10 (el 10% test se evalúa una sola vez).
+  2. Split ESTRATIFICADO 80/20 (train/valid, sin test).
   3. Optuna maximizando macro-F1 por VALIDACIÓN CRUZADA 3-fold (robusto, no depende
      de un único split).
   4. XGBClassifier(objective='binary:logistic') + early stopping sobre validación.
@@ -50,9 +50,8 @@ def _clf(seed=RANDOM_STATE, early_stopping=False, **params) -> XGBClassifier:
 
 def _split(y, seed=RANDOM_STATE):
     idx = np.arange(len(y))
-    rest, test = train_test_split(idx, test_size=0.10, random_state=seed, stratify=y)
-    tr, va = train_test_split(rest, test_size=2 / 9, random_state=seed, stratify=y[rest])
-    return tr, va, test, rest
+    tr, va = train_test_split(idx, test_size=0.20, random_state=seed, stratify=y)
+    return tr, va
 
 
 def _eval(model, X, y) -> dict:
@@ -66,13 +65,13 @@ def _eval(model, X, y) -> dict:
     }
 
 
-def _tune(X, y, rest, n_trials: int = 40):
-    """Optuna -> maximiza macro-F1 de CV 3-fold sobre `rest` (scaler por fold)."""
+def _tune(X, y, idx, n_trials: int = 40):
+    """Optuna -> maximiza macro-F1 de CV 3-fold sobre `idx` (scaler por fold)."""
     def cv_macro_f1(params):
         skf = StratifiedKFold(3, shuffle=True, random_state=RANDOM_STATE)
         scores = []
-        for a, b in skf.split(rest, y[rest]):
-            ia, ib = rest[a], rest[b]
+        for a, b in skf.split(idx, y[idx]):
+            ia, ib = idx[a], idx[b]
             sc = StandardScaler().fit(X.iloc[ia])
             m = _clf(n_estimators=500, **params)
             m.fit(sc.transform(X.iloc[ia]), y[ia])
@@ -115,23 +114,6 @@ def _cv_metrics(X, y, params, splits: int = 5) -> dict:
             "roc_auc": float(np.mean(auc))}
 
 
-def _multiseed_test(X, y, params, seeds=(42, 1, 7, 13, 99)) -> dict:
-    """Estimado central honesto del test promediando varias semillas (con early stopping)."""
-    acc, rec, f1s, auc = [], [], [], []
-    for sd in seeds:
-        tr, va, te, _ = _split(y, seed=sd)
-        sc = StandardScaler().fit(X.iloc[tr])
-        m = _clf(seed=sd, early_stopping=True, n_estimators=1500, **params)
-        m.fit(sc.transform(X.iloc[tr]), y[tr], eval_set=[(sc.transform(X.iloc[va]), y[va])], verbose=False)
-        Xte = sc.transform(X.iloc[te])
-        p = m.predict(Xte)
-        acc.append(accuracy_score(y[te], p)); rec.append(recall_score(y[te], p, zero_division=0))
-        f1s.append(f1_score(y[te], p)); auc.append(roc_auc_score(y[te], m.predict_proba(Xte)[:, 1]))
-    return {"accuracy": float(np.mean(acc)), "recall": float(np.mean(rec)),
-            "f1": float(np.mean(f1s)), "roc_auc": float(np.mean(auc)),
-            "accuracy_std": float(np.std(acc)), "n_seeds": len(seeds)}
-
-
 def main(n_trials: int = 40) -> dict:
     os.makedirs(_MODELS, exist_ok=True)
 
@@ -139,14 +121,15 @@ def main(n_trials: int = 40) -> dict:
     feats = referential_features(df)
     y = binary_target(df)
     X = df[feats]
-    tr, va, te, rest = _split(y)
+    tr, va = _split(y)
+    idx_all = np.arange(len(y))
 
     # 1) Optuna (CV macro-F1) -> mejores hiperparámetros
-    best, best_cv_f1 = _tune(X, y, rest, n_trials=n_trials)
+    best, best_cv_f1 = _tune(X, y, idx_all, n_trials=n_trials)
 
     # 2) Modelo FINAL: scaler en train, early stopping en validación
     scaler = StandardScaler().fit(X.iloc[tr])
-    Xtr, Xva, Xte = scaler.transform(X.iloc[tr]), scaler.transform(X.iloc[va]), scaler.transform(X.iloc[te])
+    Xtr, Xva = scaler.transform(X.iloc[tr]), scaler.transform(X.iloc[va])
     model = _clf(early_stopping=True, n_estimators=1500, **best)
     model.fit(Xtr, y[tr], eval_set=[(Xva, y[va])], verbose=False)
     n_trees = int(model.best_iteration) + 1
@@ -154,7 +137,7 @@ def main(n_trials: int = 40) -> dict:
     # 3) SHAP sobre el modelo final
     explainer = shap.TreeExplainer(model)
 
-    # 4) Métricas (train / valid / test + CV + multi-semilla)
+    # 4) Métricas (train / valid + CV)
     metrics = {
         "modelo": "XGBoost Classifier binario (Déficit / Ahorra)",
         "clases": CLASS_LABELS,
@@ -163,17 +146,15 @@ def main(n_trials: int = 40) -> dict:
         "excluidas_por_fuga": ["GASTO_OTROS_BIENES", "CAPACIDAD_BRUTA", "ING_TOTAL",
                                "montos crudos de gasto", "EDAD"],
         "n_total": int(len(df)), "n_train": int(len(tr)),
-        "n_valid": int(len(va)), "n_test": int(len(te)),
+        "n_valid": int(len(va)),
         "baseline_clase_mayoritaria_acc": float(max(np.mean(y == 0), np.mean(y == 1))),
         "n_arboles_early_stopping": n_trees,
         "best_cv_macro_f1": best_cv_f1,
         "train": _eval(model, Xtr, y[tr]),
         "valid": _eval(model, Xva, y[va]),
-        "test": _eval(model, Xte, y[te]),
         "cv_5fold": _cv_metrics(X, y, best),
-        "multi_semilla_test": _multiseed_test(X, y, best),
     }
-    metrics["gap_accuracy_train_test"] = round(metrics["train"]["accuracy"] - metrics["test"]["accuracy"], 4)
+    metrics["gap_accuracy_train_valid"] = round(metrics["train"]["accuracy"] - metrics["valid"]["accuracy"], 4)
 
     # 5) Persistencia de artefactos
     joblib.dump(model, _MODELS / "xgb_clf_model.pkl")
@@ -193,11 +174,11 @@ def main(n_trials: int = 40) -> dict:
 
 if __name__ == "__main__":
     rep = main()
-    t = rep["test"]; cv = rep["cv_5fold"]; ms = rep["multi_semilla_test"]
+    tr_m = rep["train"]; va_m = rep["valid"]; cv = rep["cv_5fold"]
     print("\n=========== CLASIFICADOR BINARIO ENTRENADO ===========")
     print(f"Features honestas: {rep['n_features']} | filas: {rep['n_total']} | árboles: {rep['n_arboles_early_stopping']}")
-    print(f"TEST        -> acc={t['accuracy']:.3f}  recall={t['recall']:.3f}  F1={t['f1']:.3f}  AUC={t['roc_auc']:.3f}")
+    print(f"TRAIN       -> acc={tr_m['accuracy']:.3f}  recall={tr_m['recall']:.3f}  F1={tr_m['f1']:.3f}  AUC={tr_m['roc_auc']:.3f}")
+    print(f"VALID       -> acc={va_m['accuracy']:.3f}  recall={va_m['recall']:.3f}  F1={va_m['f1']:.3f}  AUC={va_m['roc_auc']:.3f}")
     print(f"CV 5-fold   -> acc={cv['accuracy']:.3f}  recall={cv['recall']:.3f}  F1={cv['f1']:.3f}  AUC={cv['roc_auc']:.3f}")
-    print(f"Multi-semilla-> acc={ms['accuracy']:.3f}  recall={ms['recall']:.3f}  F1={ms['f1']:.3f}  AUC={ms['roc_auc']:.3f}")
-    print(f"gap train-test = {rep['gap_accuracy_train_test']} | baseline = {rep['baseline_clase_mayoritaria_acc']:.3f}")
+    print(f"gap train-valid = {rep['gap_accuracy_train_valid']} | baseline = {rep['baseline_clase_mayoritaria_acc']:.3f}")
     print("Artefactos guardados en models/: xgb_clf_model.pkl, scaler.pkl, shap_explainer.pkl, features.json, xgb_best_params.json, metrics.json")

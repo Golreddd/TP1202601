@@ -1,0 +1,235 @@
+{% extends "base.html" %}
+{% block title %}Admin — Validación ML{% endblock %}
+{% block page_title %}Validación ML con usuarios reales{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <div class="page-title">🧪 Validación ML con usuarios reales</div>
+    <div class="page-sub">Primer análisis de cada usuario contrastado con su ahorro real del mes (ingreso − gasto). Clase positiva: Ahorra.</div>
+  </div>
+  <div>
+    <a href="{% url 'panel_admin:validacion_ml_export' %}" class="btn btn-primary btn-sm"
+       {% if not resumen.n %}aria-disabled="true" style="opacity:.5;pointer-events:none;"{% endif %}>⬇️ Exportar CSV</a>
+  </div>
+</div>
+
+<!-- Stats -->
+<div class="stats-grid mb-6">
+  <div class="stat-card blue">
+    <div class="stat-icon">👤</div>
+    <div class="stat-label">Casos de prueba</div>
+    <div class="stat-value">{{ resumen.n }}</div>
+    <div class="stat-change">Usuarios con primer análisis</div>
+  </div>
+  <div class="stat-card green">
+    <div class="stat-icon">🎯</div>
+    <div class="stat-label">Accuracy real</div>
+    <div class="stat-value">{% if resumen.accuracy is not None %}{{ resumen.accuracy }}%{% else %}—{% endif %}</div>
+    <div class="stat-change">{{ resumen.aciertos }} aciertos / {{ resumen.errores }} errores</div>
+  </div>
+  <div class="stat-card purple">
+    <div class="stat-icon">📐</div>
+    <div class="stat-label">F1 real</div>
+    <div class="stat-value">{% if resumen.f1 is not None %}{{ resumen.f1 }}%{% else %}—{% endif %}</div>
+    <div class="stat-change">Precision {% if resumen.precision is not None %}{{ resumen.precision }}%{% else %}—{% endif %} · Recall {% if resumen.recall is not None %}{{ resumen.recall }}%{% else %}—{% endif %}</div>
+  </div>
+  <div class="stat-card orange">
+    <div class="stat-icon">📊</div>
+    <div class="stat-label">Set de validación (80/20)</div>
+    <div class="stat-value">{% for fila in comparativa %}{% if fila.metrica == 'Accuracy' %}{% if fila.valid is not None %}{{ fila.valid }}%{% else %}—{% endif %}{% endif %}{% endfor %}</div>
+    <div class="stat-change">Accuracy publicada · n = {{ n_valid|default:"—" }}</div>
+  </div>
+</div>
+
+{% if not resumen.n %}
+<div class="card mb-6">
+  <div class="empty-state">
+    <div class="empty-icon">🧪</div>
+    <h3>Aún no hay casos de prueba</h3>
+    <p>Cada usuario real genera su caso automáticamente la primera vez que ejecuta el análisis ML.
+       Para usuarios que ya tienen análisis previos, ejecuta <code>python manage.py backfill_validacion_ml</code>.</p>
+  </div>
+</div>
+{% endif %}
+
+<div class="grid-2 mb-6">
+  <!-- Matriz de confusión -->
+  <div class="card">
+    <div class="card-header"><div class="card-title">Matriz de confusión</div></div>
+    <div class="card-body" style="padding:0;">
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th></th>
+              <th>Real: Ahorra</th>
+              <th>Real: Déficit</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="font-semi">Predicho: Ahorra</td>
+              <td><span class="badge badge-green">TP {{ resumen.tp }}</span></td>
+              <td><span class="badge badge-red">FP {{ resumen.fp }}</span></td>
+            </tr>
+            <tr>
+              <td class="font-semi">Predicho: Déficit</td>
+              <td><span class="badge badge-red">FN {{ resumen.fn }}</span></td>
+              <td><span class="badge badge-green">TN {{ resumen.tn }}</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="text-sm text-muted" style="padding:12px 18px;">
+        TP: predijo Ahorra y ahorró · FP: predijo Ahorra y quedó en déficit ·
+        TN: predijo Déficit y quedó en déficit · FN: predijo Déficit y ahorró.
+      </div>
+    </div>
+  </div>
+
+  <!-- Distribución visual -->
+  <div class="card">
+    <div class="card-header"><div class="card-title">Distribución de resultados</div></div>
+    <div class="card-body">
+      {% if resumen.n %}
+        <div class="chart-container"><canvas id="confChart"></canvas></div>
+      {% else %}
+        <div class="text-sm text-muted">Sin datos todavía.</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- Comparativa con metrics.json -->
+<div class="card mb-6">
+  <div class="card-header">
+    <div class="card-title">Comparativa: usuarios reales vs. entrenamiento</div>
+  </div>
+  <div class="card-body" style="padding:0;">
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Métrica</th>
+            <th>Usuarios reales (n = {{ resumen.n }})</th>
+            <th>Validación 80/20 (n = {{ n_valid|default:"—" }})</th>
+            <th>CV 5-fold</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for fila in comparativa %}
+          <tr>
+            <td class="font-semi">{{ fila.metrica }}</td>
+            <td>{% if fila.real is not None %}<span class="font-bold text-primary">{{ fila.real }}%</span>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+            <td>{% if fila.valid is not None %}{{ fila.valid }}%{% else %}<span class="text-muted">—</span>{% endif %}</td>
+            <td>{% if fila.cv is not None %}{{ fila.cv }}%{% else %}<span class="text-muted">—</span>{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="text-sm text-muted" style="padding:12px 18px;">
+      Valores de <code>models/metrics.json</code> (split estratificado 80/20, train = {{ n_train|default:"—" }}).
+      Con pocos usuarios reales las métricas son orientativas; ganan significado a medida que crece la muestra.
+    </div>
+  </div>
+</div>
+
+<!-- Filtros -->
+<form method="get" class="filter-bar mb-6">
+  <input type="text" name="search" class="form-input" placeholder="Buscar por nombre o correo…"
+         value="{{ search }}" style="width:260px;">
+  <select name="tipo" class="form-input" style="width:200px;" onchange="this.form.submit()">
+    <option value="">Todos los resultados</option>
+    {% for codigo, nombre in tipos %}
+      <option value="{{ codigo }}" {% if tipo == codigo %}selected{% endif %}>{{ codigo }} — {{ nombre }}</option>
+    {% endfor %}
+  </select>
+  <button type="submit" class="btn btn-primary btn-sm">Buscar</button>
+  {% if search or tipo %}
+    <a href="{% url 'panel_admin:validacion_ml' %}" class="btn btn-sm btn-outline">Limpiar</a>
+  {% endif %}
+</form>
+
+<!-- Tabla por usuario -->
+<div class="card">
+  <div class="card-body" style="padding:0;">
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Usuario</th>
+            <th>Período</th>
+            <th>Ingreso</th>
+            <th>Gasto</th>
+            <th>Ahorro real</th>
+            <th>Real</th>
+            <th>Predicho</th>
+            <th>P(Ahorra)</th>
+            <th>Confianza</th>
+            <th>Resultado</th>
+            <th>Capturado</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for c in page_obj %}
+          <tr>
+            <td>
+              <div class="font-semi">{{ c.usuario.nickname|default:"—" }}</div>
+              <div class="text-sm text-muted">{{ c.usuario.email }}</div>
+            </td>
+            <td class="text-muted">{{ c.periodo|date:"m/Y" }}</td>
+            <td>S/ {{ c.ing_total|floatformat:2 }}</td>
+            <td>S/ {{ c.gasto_total|floatformat:2 }}</td>
+            <td class="font-semi">S/ {{ c.ahorro_real|floatformat:2 }}</td>
+            <td><span class="badge {% if c.clase_real == 1 %}badge-green{% else %}badge-red{% endif %}">{{ c.label_real }}</span></td>
+            <td><span class="badge {% if c.clase_predicha == 1 %}badge-green{% else %}badge-red{% endif %}">{{ c.label_predicha }}</span></td>
+            <td>{{ c.prob_ahorra|floatformat:3 }}</td>
+            <td class="text-muted">{{ c.confianza }}</td>
+            <td>
+              <span class="badge {% if c.acierto %}badge-green{% else %}badge-red{% endif %}" title="{{ c.get_tipo_display }}">
+                {{ c.tipo }}
+              </span>
+            </td>
+            <td class="text-muted">{{ c.creado_en|date:"d/m/Y H:i" }}</td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="11" style="text-align:center;padding:32px;color:var(--text2);">
+              {% if search or tipo %}No hay casos que coincidan con el filtro.{% else %}Todavía no hay casos de prueba registrados.{% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% if page_obj.paginator.num_pages > 1 %}
+    <div class="flex flex-center justify-between" style="gap:12px;flex-wrap:wrap;padding:16px 18px;border-top:1px solid var(--border);">
+      <div class="text-sm text-muted">Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }} · {{ total_casos }} casos</div>
+      <div class="flex gap-2">
+        {% if page_obj.has_previous %}
+          <a href="?page={{ page_obj.previous_page_number }}{% if querystring %}&{{ querystring }}{% endif %}" class="btn btn-sm btn-outline">‹ Anterior</a>
+        {% endif %}
+        {% if page_obj.has_next %}
+          <a href="?page={{ page_obj.next_page_number }}{% if querystring %}&{{ querystring }}{% endif %}" class="btn btn-sm btn-outline">Siguiente ›</a>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{% if resumen.n %}
+<script>
+const confLabels = {{ conf_labels|safe }};
+const confData   = {{ conf_data|safe }};
+document.addEventListener('DOMContentLoaded', () => {
+  mkDoughnut('confChart', confLabels, confData);
+});
+</script>
+{% endif %}
+{% endblock %}

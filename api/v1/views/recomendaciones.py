@@ -222,6 +222,13 @@ class EjecutarMLView(APIView):
             categoria_objetivo=resultado_raw.get('categoria_objetivo') or '',
         )
 
+        # 5b. Primer análisis del usuario → caso de prueba con datos reales (una sola vez).
+        from panel_admin.models import ValidacionPrimerUso
+        try:
+            ValidacionPrimerUso.registrar_si_primero(resultado)
+        except Exception:
+            logger.exception('No se pudo registrar la validación de primer uso.')
+
         # 6. Verificar logros desbloqueables
         verificar_y_otorgar_logros(user, contexto='ml')
 
