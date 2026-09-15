@@ -11,4 +11,6 @@ urlpatterns = [
     path('metricas/',                       views.metrics_view,      name='metrics'),
     path('validacion-ml/',                  views.validacion_ml,     name='validacion_ml'),
     path('validacion-ml/exportar/',         views.validacion_ml_export, name='validacion_ml_export'),
+    path('evolucion-ahorro/',               views.evolucion_ahorro,  name='evolucion_ahorro'),
+    path('evolucion-ahorro/exportar/',      views.evolucion_ahorro_export, name='evolucion_ahorro_export'),
 ]

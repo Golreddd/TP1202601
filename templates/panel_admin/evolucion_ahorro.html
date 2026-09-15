@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+{% load l10n %}
+{% block title %}Admin — Evolución de Ahorro{% endblock %}
+{% block page_title %}Evolución de la tasa de ahorro{% endblock %}
+
+{% comment %}
+Tabla de validación: tasa de ahorro (ahorro ÷ ingreso total) de cada usuario, desde
+su primer registro hasta el último. "Porcentaje actual" es la línea base —el primer
+mes que registró— y P1..Pn son los meses posteriores, en orden cronológico.
+{% endcomment %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <div class="page-title">📈 Evolución de la tasa de ahorro</div>
+    <div class="page-sub">
+      Porcentaje de ahorro sobre el ingreso total de cada usuario, desde su primer registro.
+      Se calcula en vivo: siempre refleja los datos actuales.
+    </div>
+  </div>
+  <div>
+    <a href="{% url 'panel_admin:evolucion_ahorro_export' %}{% if search %}?search={{ search|urlencode }}{% if todos %}&todos=1{% endif %}{% elif todos %}?todos=1{% endif %}"
+       class="btn btn-primary btn-sm"
+       {% if not filas %}aria-disabled="true" style="opacity:.5;pointer-events:none;"{% endif %}>⬇️ Descargar Excel (CSV)</a>
+  </div>
+</div>
+
+<!-- Resumen -->
+<div class="stats-grid mb-6">
+  <div class="stat-card blue">
+    <div class="stat-icon">👥</div>
+    <div class="stat-label">Usuarios con registros</div>
+    <div class="stat-value">{{ resumen.n_con_datos }}</div>
+    <div class="stat-change">{{ resumen.n_con_var }} con 2 meses o más</div>
+  </div>
+  <div class="stat-card purple">
+    <div class="stat-icon">🏁</div>
+    <div class="stat-label">Tasa inicial promedio</div>
+    <div class="stat-value">{% if resumen.base_prom is not None %}{{ resumen.base_prom }}%{% else %}—{% endif %}</div>
+    <div class="stat-change">Primer mes registrado</div>
+  </div>
+  <div class="stat-card green">
+    <div class="stat-icon">📊</div>
+    <div class="stat-label">Tasa actual promedio</div>
+    <div class="stat-value">{% if resumen.ultima_prom is not None %}{{ resumen.ultima_prom }}%{% else %}—{% endif %}</div>
+    <div class="stat-change">Último mes registrado</div>
+  </div>
+  <div class="stat-card orange">
+    <div class="stat-icon">📈</div>
+    <div class="stat-label">Variación promedio</div>
+    <div class="stat-value">
+      {% if resumen.variacion is not None %}
+        {% if resumen.variacion > 0 %}+{% endif %}{{ resumen.variacion }} pts
+      {% else %}—{% endif %}
+    </div>
+    <div class="stat-change">
+      <span class="text-success">▲ {{ resumen.mejoraron }} mejoraron</span> ·
+      <span class="text-danger">▼ {{ resumen.empeoraron }}</span>
+    </div>
+  </div>
+</div>
+
+<!-- Filtros -->
+<div class="card mb-6">
+  <div class="card-body">
+    <form method="get" class="flex gap-3" style="flex-wrap:wrap;align-items:center;">
+      <input type="text" name="search" value="{{ search }}" class="form-input"
+             placeholder="Buscar por nombre o correo…" style="max-width:320px;">
+      <label style="display:inline-flex;align-items:center;gap:7px;font-size:13px;color:var(--text2);">
+        <input type="checkbox" name="todos" value="1" {% if todos %}checked{% endif %}>
+        Incluir usuarios sin registros
+      </label>
+      <button type="submit" class="btn btn-primary btn-sm">Aplicar</button>
+      {% if search or todos %}
+        <a href="{% url 'panel_admin:evolucion_ahorro' %}" class="btn btn-outline btn-sm">Limpiar</a>
+      {% endif %}
+    </form>
+  </div>
+</div>
+
+<!-- Tabla -->
+<div class="card">
+  <div class="card-header mb-4">
+    <div class="card-title">
+      Detalle por usuario <span class="text-sm text-muted">({{ filas|length }})</span>
+    </div>
+    <span class="tag">
+      {% if max_meses %}Hasta {{ max_meses }} mes{{ max_meses|pluralize:"es" }} posteriores{% else %}Sin meses posteriores aún{% endif %}
+    </span>
+  </div>
+  <div class="card-body" style="padding-top:0;">
+    {% if filas %}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>N°</th>
+            <th>NOMBRE</th>
+            <th>CORREO</th>
+            <th title="Tasa de ahorro del primer mes que registró">PORCENTAJE ACTUAL</th>
+            {% for n in columnas %}
+              <th title="Mes {{ n }} después del registro inicial">P{{ n }}</th>
+            {% endfor %}
+            <th title="Diferencia en puntos porcentuales entre el último mes y el primero">VARIACIÓN</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for fila in filas %}
+          <tr>
+            <td class="text-muted">{{ forloop.counter }}</td>
+            <td class="font-semi">{{ fila.usuario.nickname }}</td>
+            <td class="text-sm text-muted">{{ fila.usuario.email }}</td>
+            <td class="font-bold">
+              {% if fila.base is not None %}
+                {{ fila.base }}%
+                {% if fila.periodo_base %}
+                  <span class="text-xs text-muted">({{ fila.periodo_base|date:"M Y" }})</span>
+                {% endif %}
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+            {% for valor in fila.posteriores %}
+              <td>
+                {% if valor is not None %}
+                  {{ valor }}%
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+            {% endfor %}
+            <td>
+              {% if fila.variacion is not None %}
+                <span class="badge {% if fila.variacion > 0 %}badge-green{% elif fila.variacion < 0 %}badge-red{% else %}badge-orange{% endif %}">
+                  {% if fila.variacion > 0 %}+{% endif %}{{ fila.variacion }} pts
+                </span>
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="info-box mt-4" style="font-size:12.5px;">
+      ℹ️ <strong>Porcentaje actual</strong> es la tasa de ahorro del primer mes que registró el usuario
+      (su punto de partida). <strong>P1, P2, P3…</strong> son los meses siguientes en orden cronológico;
+      como cada usuario empieza en un mes distinto, las columnas indican meses transcurridos, no meses del calendario.
+      La <strong>variación</strong> compara el último mes contra el primero, en puntos porcentuales.
+    </div>
+    {% else %}
+    <div class="empty-state">
+      <div class="empty-icon">📈</div>
+      <h3>Sin datos para mostrar</h3>
+      <p>
+        {% if search %}
+          Ningún usuario coincide con «{{ search }}».
+        {% else %}
+          Aún no hay usuarios con registros mensuales.
+        {% endif %}
+      </p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

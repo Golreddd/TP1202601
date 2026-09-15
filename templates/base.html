@@ -92,6 +92,10 @@
         <a href="{{ url_admin_val }}" class="nav-item {% if '/validacion-ml' in request.path %}active{% endif %}">
           <span class="nav-icon">🧪</span> Validación ML
         </a>
+        {% url 'panel_admin:evolucion_ahorro' as url_admin_evo %}
+        <a href="{{ url_admin_evo }}" class="nav-item {% if '/evolucion-ahorro' in request.path %}active{% endif %}">
+          <span class="nav-icon">📈</span> Evolución de Ahorro
+        </a>
         {% url 'panel_admin:metrics' as url_admin_met %}
         <a href="{{ url_admin_met }}" class="nav-item {% if '/metricas' in request.path %}active{% endif %}">
           <span class="nav-icon">⚙️</span> Métricas

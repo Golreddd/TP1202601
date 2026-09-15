@@ -256,3 +256,139 @@ def validacion_ml_export(request):
             timezone.localtime(c.creado_en).strftime('%d/%m/%Y %H:%M'),
         ])
     return response
+
+
+# ── Evolución de la tasa de ahorro por usuario ─────────────────────────────────
+
+def _evolucion_ahorro(usuarios):
+    """Tasa de ahorro (ahorro ÷ ingreso total) de cada usuario mes a mes.
+
+    Por cada usuario devuelve la tasa de su PRIMER registro —la línea base, antes de
+    que el sistema influyera en su comportamiento— y la de cada mes posterior en orden
+    cronológico. Se calcula en vivo desde RegistroMensual en lugar de guardar una
+    copia, para que la tabla siga siendo correcta si el usuario corrige un mes.
+
+    Devuelve (filas, max_meses_posteriores) — `max_meses` define cuántas columnas
+    P1..Pn necesita la tabla para que todas las filas queden alineadas.
+    """
+    from financiero.models import RegistroMensual
+
+    def _tasa(registro):
+        # Se calcula aqui con 2 decimales en vez de usar la propiedad `tasa_ahorro`
+        # del modelo, que redondea a 1 decimal: en una tabla de validacion esa
+        # decima extra distingue mejoras pequenas entre un mes y otro.
+        ingreso = registro.ing_total
+        if ingreso <= 0:
+            return 0.0
+        return round(registro.ahorro_bruto / ingreso * 100, 2)
+
+    por_usuario = {}
+    for r in (RegistroMensual.objects
+              .filter(usuario__in=usuarios)
+              .order_by('usuario_id', 'periodo')):
+        por_usuario.setdefault(r.usuario_id, []).append(r)
+
+    filas, max_meses = [], 0
+    for usuario in usuarios:
+        regs = por_usuario.get(usuario.id, [])
+        tasas = [_tasa(r) for r in regs]
+        posteriores = tasas[1:]
+        max_meses = max(max_meses, len(posteriores))
+        filas.append({
+            'usuario':      usuario,
+            'base':         tasas[0] if tasas else None,
+            'periodo_base': regs[0].periodo if regs else None,
+            'posteriores':  posteriores,
+            'ultima':       tasas[-1] if tasas else None,
+            # Mejora en PUNTOS porcentuales entre el primer mes y el último: es la
+            # cifra que responde si el usuario ahorra más desde que usa el sistema.
+            'variacion':    round(tasas[-1] - tasas[0], 2) if len(tasas) >= 2 else None,
+            'n_meses':      len(tasas),
+        })
+
+    # Se rellenan con None las filas más cortas para que todas tengan max_meses celdas
+    for fila in filas:
+        fila['posteriores'] += [None] * (max_meses - len(fila['posteriores']))
+    return filas, max_meses
+
+
+def _resumen_evolucion(filas):
+    """Promedios sobre los usuarios que ya tienen al menos un registro."""
+    con_datos = [f for f in filas if f['base'] is not None]
+    con_variacion = [f for f in con_datos if f['variacion'] is not None]
+
+    def _prom(valores):
+        return round(sum(valores) / len(valores), 2) if valores else None
+
+    return {
+        'n_usuarios':   len(filas),
+        'n_con_datos':  len(con_datos),
+        'n_con_var':    len(con_variacion),
+        'base_prom':    _prom([f['base'] for f in con_datos]),
+        'ultima_prom':  _prom([f['ultima'] for f in con_datos]),
+        'variacion':    _prom([f['variacion'] for f in con_variacion]),
+        'mejoraron':    sum(1 for f in con_variacion if f['variacion'] > 0),
+        'empeoraron':   sum(1 for f in con_variacion if f['variacion'] < 0),
+    }
+
+
+def _usuarios_evolucion(request):
+    """Usuarios de la tabla, aplicando la búsqueda y el filtro de la pantalla."""
+    usuarios = Usuario.objects.order_by('date_joined')
+    search = request.GET.get('search', '').strip()
+    if search:
+        usuarios = usuarios.filter(
+            Q(nickname__icontains=search) | Q(email__icontains=search)
+        )
+    # Por defecto solo se listan los usuarios que ya registraron algún mes: los demás
+    # no aportan nada a la tabla. Con ?todos=1 se muestran todos.
+    if request.GET.get('todos') != '1':
+        usuarios = usuarios.filter(registros__isnull=False).distinct()
+    return list(usuarios), search
+
+
+@staff_member_required
+def evolucion_ahorro(request):
+    usuarios, search = _usuarios_evolucion(request)
+    filas, max_meses = _evolucion_ahorro(usuarios)
+    return render(request, 'panel_admin/evolucion_ahorro.html', {
+        'filas':       filas,
+        'columnas':    range(1, max_meses + 1),
+        'max_meses':   max_meses,
+        'resumen':     _resumen_evolucion(filas),
+        'search':      search,
+        'todos':       request.GET.get('todos') == '1',
+    })
+
+
+@staff_member_required
+def evolucion_ahorro_export(request):
+    usuarios, _search = _usuarios_evolucion(request)
+    filas, max_meses = _evolucion_ahorro(usuarios)
+
+    AuditLog.registrar(
+        admin=request.user, accion='EXPORTAR_DATOS', request=request,
+        detalle=f'Exportación de evolución de ahorro: {len(filas)} usuarios',
+    )
+
+    fecha = timezone.localdate().strftime('%Y%m%d')
+    response = HttpResponse(content_type='text/csv; charset=utf-8')
+    response['Content-Disposition'] = f'attachment; filename="evolucion_ahorro_{fecha}.csv"'
+    response.write('\ufeff')   # BOM: Excel abre el UTF-8 con tildes correctas
+    w = csv.writer(response, delimiter=';')
+    w.writerow(['N°', 'NOMBRE', 'CORREO', 'PORCENTAJE ACTUAL']
+               + [f'P{i}' for i in range(1, max_meses + 1)]
+               + ['VARIACIÓN (puntos)', 'MESES REGISTRADOS', 'MES INICIAL'])
+
+    def _pc(valor):
+        # Coma decimal: es lo que espera Excel en configuración regional es-PE
+        return '' if valor is None else f'{valor:.2f}'.replace('.', ',')
+
+    for i, fila in enumerate(filas, start=1):
+        w.writerow([
+            i, fila['usuario'].nickname, fila['usuario'].email, _pc(fila['base']),
+            *[_pc(v) for v in fila['posteriores']],
+            _pc(fila['variacion']), fila['n_meses'],
+            fila['periodo_base'].strftime('%Y-%m') if fila['periodo_base'] else '',
+        ])
+    return response
