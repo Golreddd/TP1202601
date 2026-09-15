@@ -260,6 +260,12 @@ def validacion_ml_export(request):
 
 # ── Evolución de la tasa de ahorro por usuario ─────────────────────────────────
 
+# La tabla siempre muestra estas columnas de mes, aunque todavia no haya datos: se
+# van llenando conforme cada usuario registra meses nuevos. Si alguien llegara a
+# superar este historial, se agregan las columnas que falten.
+MESES_TABLA = 10
+
+
 def _evolucion_ahorro(usuarios):
     """Tasa de ahorro (ahorro ÷ ingreso total) de cada usuario mes a mes.
 
@@ -268,8 +274,9 @@ def _evolucion_ahorro(usuarios):
     cronológico. Se calcula en vivo desde RegistroMensual en lugar de guardar una
     copia, para que la tabla siga siendo correcta si el usuario corrige un mes.
 
-    Devuelve (filas, max_meses_posteriores) — `max_meses` define cuántas columnas
-    P1..Pn necesita la tabla para que todas las filas queden alineadas.
+    Devuelve (filas, n_columnas, meses_con_datos): `n_columnas` es cuántas columnas de
+    mes se pintan —siempre al menos MESES_TABLA— y `meses_con_datos` cuántas tienen
+    algún valor hoy, solo para informarlo en pantalla.
     """
     from financiero.models import RegistroMensual
 
@@ -306,10 +313,12 @@ def _evolucion_ahorro(usuarios):
             'n_meses':      len(tasas),
         })
 
-    # Se rellenan con None las filas más cortas para que todas tengan max_meses celdas
+    # Se rellenan con None hasta completar las columnas fijas, para que todas las
+    # filas queden alineadas y los meses aún sin registrar se vean vacíos.
+    n_columnas = max(MESES_TABLA, max_meses)
     for fila in filas:
-        fila['posteriores'] += [None] * (max_meses - len(fila['posteriores']))
-    return filas, max_meses
+        fila['posteriores'] += [None] * (n_columnas - len(fila['posteriores']))
+    return filas, n_columnas, max_meses
 
 
 def _resumen_evolucion(filas):
@@ -350,11 +359,11 @@ def _usuarios_evolucion(request):
 @staff_member_required
 def evolucion_ahorro(request):
     usuarios, search = _usuarios_evolucion(request)
-    filas, max_meses = _evolucion_ahorro(usuarios)
+    filas, n_columnas, meses_con_datos = _evolucion_ahorro(usuarios)
     return render(request, 'panel_admin/evolucion_ahorro.html', {
-        'filas':       filas,
-        'columnas':    range(1, max_meses + 1),
-        'max_meses':   max_meses,
+        'filas':            filas,
+        'columnas':         range(1, n_columnas + 1),
+        'meses_con_datos':  meses_con_datos,
         'resumen':     _resumen_evolucion(filas),
         'search':      search,
         'todos':       request.GET.get('todos') == '1',
@@ -364,7 +373,7 @@ def evolucion_ahorro(request):
 @staff_member_required
 def evolucion_ahorro_export(request):
     usuarios, _search = _usuarios_evolucion(request)
-    filas, max_meses = _evolucion_ahorro(usuarios)
+    filas, n_columnas, _meses_con_datos = _evolucion_ahorro(usuarios)
 
     AuditLog.registrar(
         admin=request.user, accion='EXPORTAR_DATOS', request=request,
@@ -377,7 +386,7 @@ def evolucion_ahorro_export(request):
     response.write('\ufeff')   # BOM: Excel abre el UTF-8 con tildes correctas
     w = csv.writer(response, delimiter=';')
     w.writerow(['N°', 'NOMBRE', 'CORREO', 'PORCENTAJE ACTUAL']
-               + [f'P{i}' for i in range(1, max_meses + 1)]
+               + [f'Mes {i}' for i in range(1, n_columnas + 1)]
                + ['VARIACIÓN (puntos)', 'MESES REGISTRADOS', 'MES INICIAL'])
 
     def _pc(valor):

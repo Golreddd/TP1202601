@@ -85,7 +85,11 @@ mes que registró— y P1..Pn son los meses posteriores, en orden cronológico.
       Detalle por usuario <span class="text-sm text-muted">({{ filas|length }})</span>
     </div>
     <span class="tag">
-      {% if max_meses %}Hasta {{ max_meses }} mes{{ max_meses|pluralize:"es" }} posteriores{% else %}Sin meses posteriores aún{% endif %}
+      {% if meses_con_datos %}
+        Con datos hasta Mes {{ meses_con_datos }}
+      {% else %}
+        Aún sin meses posteriores registrados
+      {% endif %}
     </span>
   </div>
   <div class="card-body" style="padding-top:0;">
@@ -99,7 +103,7 @@ mes que registró— y P1..Pn son los meses posteriores, en orden cronológico.
             <th>CORREO</th>
             <th title="Tasa de ahorro del primer mes que registró">PORCENTAJE ACTUAL</th>
             {% for n in columnas %}
-              <th title="Mes {{ n }} después del registro inicial">P{{ n }}</th>
+              <th title="Mes {{ n }} después del registro inicial">MES {{ n }}</th>
             {% endfor %}
             <th title="Diferencia en puntos porcentuales entre el último mes y el primero">VARIACIÓN</th>
           </tr>
@@ -145,8 +149,9 @@ mes que registró— y P1..Pn son los meses posteriores, en orden cronológico.
     </div>
     <div class="info-box mt-4" style="font-size:12.5px;">
       ℹ️ <strong>Porcentaje actual</strong> es la tasa de ahorro del primer mes que registró el usuario
-      (su punto de partida). <strong>P1, P2, P3…</strong> son los meses siguientes en orden cronológico;
-      como cada usuario empieza en un mes distinto, las columnas indican meses transcurridos, no meses del calendario.
+      (su punto de partida). <strong>Mes 1, Mes 2, Mes 3…</strong> son los meses siguientes en orden cronológico
+      y se van llenando solos conforme cada usuario registra más meses; como cada uno empieza en un mes distinto,
+      las columnas cuentan meses transcurridos, no meses del calendario.
       La <strong>variación</strong> compara el último mes contra el primero, en puntos porcentuales.
     </div>
     {% else %}
