@@ -78,13 +78,16 @@ function mkDoughnut(canvasId, labels, data) {
     'rgba(139,92,246,.8)', 'rgba(239,68,68,.8)', 'rgba(236,72,153,.8)',
     'rgba(14,165,233,.8)', 'rgba(168,85,247,.8)',
   ];
+  // Leyenda a la derecha del dona solo cabe en pantallas anchas; en móvil (columna
+  // angosta) la aplasta y corta los nombres de categoría — abajo se lee completa.
+  const legendPosition = window.innerWidth <= 600 ? 'bottom' : 'right';
   return new Chart(ctx, {
     type: 'doughnut',
     data: { labels, datasets: [{ data, backgroundColor: bg, borderWidth: 0, hoverOffset: 6 }] },
     options: {
       ...chartDefaults,
       cutout: '65%',
-      plugins: { ...chartDefaults.plugins, legend: { position: 'right', labels: { ...chartDefaults.plugins.legend.labels } } }
+      plugins: { ...chartDefaults.plugins, legend: { position: legendPosition, labels: { ...chartDefaults.plugins.legend.labels } } }
     }
   });
 }
@@ -138,6 +141,83 @@ function mkHorizontalBar(canvasId, labels, data, label = 'Impacto SHAP') {
     }
   });
 }
+
+// ===== MOSTRAR/OCULTAR CONTRASEÑA =====
+// Envuelve cada <input type="password"> del DOM con un botón de ojito, sin tocar
+// ningún template: cubre login, registro, restablecimiento y cambio de contraseña
+// (los tres primeros usan <input> planos, no un widget de Django) con una sola regla.
+function initPasswordToggles() {
+  document.querySelectorAll('input[type="password"]').forEach(input => {
+    if (input.dataset.toggleListo) return;
+    input.dataset.toggleListo = '1';
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'password-field';
+    input.parentNode.insertBefore(wrapper, input);
+    wrapper.appendChild(input);
+
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'password-toggle';
+    btn.textContent = '👁️';
+    btn.setAttribute('aria-label', 'Mostrar contraseña');
+    btn.addEventListener('click', () => {
+      const mostrando = input.type === 'text';
+      input.type = mostrando ? 'password' : 'text';
+      btn.textContent = mostrando ? '👁️' : '🙈';
+      btn.setAttribute('aria-label', mostrando ? 'Mostrar contraseña' : 'Ocultar contraseña');
+    });
+    wrapper.appendChild(btn);
+  });
+}
+
+// ===== LIMPIAR CEROS INICIALES EN CAMPOS NUMÉRICOS =====
+// "025" se guarda bien (el backend lo parsea como 25), pero se ve mal mientras se
+// escribe. Se normaliza al salir del campo, no en cada tecla, para no interrumpir
+// al usuario mientras sigue escribiendo.
+function initLimpiezaNumeros() {
+  document.querySelectorAll('input[type="number"]').forEach(input => {
+    input.addEventListener('blur', () => {
+      if (input.value === '') return;
+      const limpio = parseFloat(input.value);
+      if (!Number.isNaN(limpio)) input.value = String(limpio);
+    });
+  });
+}
+
+// ===== BLOQUEAR LETRAS EN CAMPOS NUMÉRICOS =====
+// <input type="number"> deja escribir "e"/"E"/"+"/"-" porque son válidos en notación
+// exponencial (ej: edad quedaba mostrando literalmente "e"). Ningún campo numérico del
+// sistema usa negativos (min siempre es 0+), así que "-" se bloquea siempre. El punto
+// decimal solo se permite si el campo declara step fraccionario (ej: montos en soles con
+// step="0.01"); los campos sin step (edad, miembros del hogar) son enteros y lo bloquean.
+function initSoloNumeros() {
+  document.querySelectorAll('input[type="number"]').forEach(input => {
+    if (input.dataset.soloNumerosListo) return;
+    input.dataset.soloNumerosListo = '1';
+
+    const stepAttr = input.getAttribute('step');
+    const permiteDecimales = !!stepAttr && stepAttr !== '1' && stepAttr !== 'any' ? parseFloat(stepAttr) < 1 : stepAttr === 'any';
+
+    input.addEventListener('keydown', (ev) => {
+      if (['e', 'E', '+', '-'].includes(ev.key)) { ev.preventDefault(); return; }
+      if (ev.key === '.' && !permiteDecimales) ev.preventDefault();
+    });
+
+    input.addEventListener('paste', (ev) => {
+      const clipboard = ev.clipboardData || window.clipboardData;
+      const texto = clipboard ? clipboard.getData('text') : '';
+      const patron = permiteDecimales ? /^\d*\.?\d*$/ : /^\d*$/;
+      if (!patron.test(texto)) ev.preventDefault();
+    });
+  });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  initPasswordToggles();
+  initLimpiezaNumeros();
+  initSoloNumeros();
+});
 
 // ===== CSRF helper para fetch() =====
 function getCookie(name) {

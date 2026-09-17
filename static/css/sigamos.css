@@ -40,6 +40,14 @@ body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--
 .form-group{margin-bottom:20px;}
 .form-label{display:block;font-size:13px;font-weight:600;color:var(--text);margin-bottom:7px;}
 .form-input{width:100%;padding:12px 16px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:14px;color:var(--text);background:var(--white);transition:all .2s;outline:none;}
+
+/* Envoltorio que agrega initPasswordToggles() (sigamos.js) alrededor de cada
+   input[type=password]; el input conserva .form-input, solo se le reserva espacio
+   a la derecha para el botón del ojito. */
+.password-field{position:relative;}
+.password-field .form-input{padding-right:42px;}
+.password-toggle{position:absolute;right:4px;top:50%;transform:translateY(-50%);width:32px;height:32px;border:none;background:none;cursor:pointer;font-size:15px;line-height:1;border-radius:var(--radius-sm);color:var(--text2);}
+.password-toggle:hover{background:var(--bg2);}
 .form-input:focus{border-color:var(--primary-light);box-shadow:0 0 0 3px rgba(59,130,246,.15);}
 .form-input::placeholder{color:var(--text3);}
 .form-input.is-invalid{border-color:var(--danger);}
@@ -97,7 +105,7 @@ a.nav-item.active,div.nav-item.active{background:rgba(59,130,246,.18);color:var(
 .content{flex:1;padding:28px;}
 
 /* ===== DJANGO MESSAGES ===== */
-.msg-alert{display:flex;align-items:center;gap:10px;padding:12px 18px;border-radius:var(--radius-sm);margin-bottom:16px;font-size:13.5px;font-weight:500;}
+.msg-alert{display:flex;align-items:center;gap:10px;padding:12px 18px;border-radius:var(--radius-sm);margin-bottom:16px;font-size:13.5px;font-weight:500;flex-wrap:wrap;}
 .msg-success{background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.3);color:#065f46;}
 .msg-error{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:#991b1b;}
 .msg-warning{background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);color:#92400e;}
@@ -132,6 +140,16 @@ a.nav-item.active,div.nav-item.active{background:rgba(59,130,246,.18);color:var(
 .grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;}
 .grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:20px;}
 .grid-cols-3-1{display:grid;grid-template-columns:2fr 1fr;gap:20px;}
+/* Variantes con proporción/columnas fija propia (antes puestas como style="" inline,
+   lo que impedía que las media queries de abajo las colapsaran en móvil). */
+.grid-racha{display:grid;grid-template-columns:1fr 2fr;gap:20px;}
+.stats-grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}
+/* Tarjetas uniformes (logros): se auto-ajustan solas al ancho disponible, sin
+   necesitar media query — nunca fuerzan un mínimo de columnas en pantallas angostas. */
+.achv-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:20px;}
+/* Grilla del resumen de mes en ML Insights (inyectada por JS, ver sigamos.js /
+   ml_insights.html renderResumenRegistro): 2 columnas en escritorio, 1 en móvil. */
+.resumen-ml-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;}
 .mb-6{margin-bottom:24px;}
 .mb-4{margin-bottom:16px;}
 .mb-3{margin-bottom:12px;}
@@ -366,7 +384,7 @@ select.form-input{appearance:none;background-image:url("data:image/svg+xml,%3Csv
 
 /* Evitar desbordes horizontales: las grillas y sus tarjetas deben poder
    encogerse por debajo del ancho intrínseco de los canvas de Chart.js. */
-body{overflow-x:hidden;}
+html,body{overflow-x:hidden;}
 .stats-grid>*,.grid-2>*,.grid-3>*,.grid-4>*,.grid-cols-3-1>*,.metric-row>*{min-width:0;}
 .card,.chart-container{min-width:0;max-width:100%;}
 .chart-container canvas{max-width:100%;}
@@ -378,8 +396,12 @@ body{overflow-x:hidden;}
 }
 
 @media (max-width:900px){
-  .grid-2,.grid-3,.grid-4,.grid-cols-3-1{grid-template-columns:1fr;}
+  .grid-2,.grid-3,.grid-4,.grid-cols-3-1,.grid-racha{grid-template-columns:1fr;}
   .metric-row{grid-template-columns:1fr;}
+}
+
+@media (max-width:600px){
+  .resumen-ml-grid{grid-template-columns:1fr;}
 }
 
 /* Tablet / móvil: sidebar deslizable (off-canvas) */
@@ -395,7 +417,10 @@ body{overflow-x:hidden;}
   .content{padding:16px;}
   .topbar{padding:0 14px;gap:10px;}
   .topbar-title{font-size:16px;}
-  .stats-grid{grid-template-columns:1fr;gap:14px;}
+  /* Título + botón/select del header de tarjeta: si no entran en una sola fila
+     (título largo + selector), bajan en vez de recortarse. */
+  .card-header{flex-wrap:wrap;gap:8px;}
+  .stats-grid,.stats-grid-3{grid-template-columns:1fr;gap:14px;}
   .form-row.cols-2,.form-row.cols-3{grid-template-columns:1fr;}
   .page-header{flex-direction:column;align-items:stretch;gap:12px;}
   .page-header .btn{width:100%;justify-content:center;}
@@ -419,4 +444,7 @@ body{overflow-x:hidden;}
   .topbar-actions{gap:8px;}
   .streak-badge{display:none;}
   .toast{left:16px;right:16px;max-width:none;bottom:16px;}
+  /* Inputs/selects con ancho fijo en px (filtros de admin, ML Insights) no deben
+     forzar scroll horizontal en pantallas muy angostas: se dejan fluidos. */
+  .filter-bar input,.filter-bar select{width:100%;max-width:none;}
 }

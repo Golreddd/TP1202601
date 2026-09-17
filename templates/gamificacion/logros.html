@@ -11,7 +11,7 @@
 </div>
 
 <!-- Racha + resumen -->
-<div class="grid-2 mb-6" style="grid-template-columns:1fr 2fr;">
+<div class="grid-racha mb-6">
 
   <!-- Racha actual -->
   <div class="streak-card">
@@ -34,7 +34,7 @@
   <div class="card">
     <div class="card-header mb-4"><div class="card-title">Resumen de Logros</div></div>
     <div class="card-body" style="padding-top:0;">
-      <div class="stats-grid" style="grid-template-columns:repeat(3,1fr);gap:12px;">
+      <div class="stats-grid-3">
         <div style="text-align:center;padding:14px;background:var(--bg);border-radius:var(--radius-sm);">
           <div style="font-size:28px;font-weight:800;color:var(--accent);">{{ total_desbloqueados }}</div>
           <div class="text-xs text-muted">Logros Obtenidos</div>
@@ -54,7 +54,7 @@
 </div>
 
 <!-- Grid de logros -->
-<div class="grid-3" style="grid-template-columns:repeat(4,1fr);">
+<div class="achv-grid">
   {% for item in logros %}
   <div class="achievement-card {% if not item.desbloqueado %}locked{% endif %}">
     <div class="achievement-icon">{{ item.logro.icono }}</div>

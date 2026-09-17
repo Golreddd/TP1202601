@@ -30,7 +30,7 @@
   <div id="mesActualNota" style="font-size:12px;color:#cbd5e1;margin:-4px 0 12px;"></div>
   <div>
     <label style="display:block;color:#94a3b8;font-size:12px;font-weight:600;margin-bottom:6px;">Mes a analizar</label>
-    <select id="registroSel" class="form-input" onchange="renderResumenRegistro()" style="min-width:420px;background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.2);color:#fff;">
+    <select id="registroSel" class="form-input" onchange="renderResumenRegistro()" style="width:100%;max-width:420px;background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.2);color:#fff;">
     </select>
   </div>
 
@@ -51,7 +51,7 @@
     <div style="margin-top:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
       <span style="font-size:12px;color:#94a3b8;">o define tu propia meta:</span>
       <input type="number" id="metaAhorro" class="form-input" placeholder="Meta libre (S/)" min="0" step="0.01"
-             oninput="elegirAlternativa(null)" style="width:160px;background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.2);color:#fff;">
+             oninput="elegirAlternativa(null)" style="flex:1;min-width:140px;max-width:220px;background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.2);color:#fff;">
     </div>
   </div>
   <div id="menuMetasDeficitNota" style="display:none;margin-top:14px;font-size:12.5px;color:#cbd5e1;">
@@ -274,7 +274,7 @@ function renderResumenRegistro() {
   el.innerHTML = `
     <div style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:16px 18px;">
       <div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:12px;">📄 Resumen de ${reg.mes} ${reg.anio}</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;">
+      <div class="resumen-ml-grid">
         <div>
           <div style="font-size:11px;color:#94a3b8;font-weight:600;text-transform:uppercase;margin-bottom:6px;">Ingresos</div>
           <div style="display:flex;justify-content:space-between;font-size:13px;color:#e2e8f0;padding:3px 0;">
