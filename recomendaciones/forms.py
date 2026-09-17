@@ -21,6 +21,12 @@ class MetaLargoPlazoForm(forms.ModelForm):
         widget=forms.DateInput(attrs={**INPUT, 'type': 'month'}),
     )
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # No se puede fijar una meta con fecha límite ya vencida (ver clean_fecha_limite,
+        # que es la validación real): esto solo bloquea la selección en el picker nativo.
+        self.fields['fecha_limite'].widget.attrs['min'] = date.today().strftime('%Y-%m')
+
     class Meta:
         model = MetaLargoPlazo
         fields = ['nombre', 'icono', 'monto_objetivo', 'monto_actual', 'fecha_limite']
@@ -37,9 +43,19 @@ class MetaLargoPlazoForm(forms.ModelForm):
             return None
         try:
             year, month = value.split('-')
-            return date(int(year), int(month), 1)
+            fecha = date(int(year), int(month), 1)
         except (ValueError, IndexError, TypeError):
             raise forms.ValidationError('Formato inválido. Selecciona un mes válido.')
+
+        hoy = date.today()
+        mes_actual = date(hoy.year, hoy.month, 1)
+        # Si la meta YA tenía esta misma fecha guardada (no se tocó al editar otros
+        # campos), se deja pasar aunque haya quedado en el pasado desde entonces — solo
+        # se bloquea CREAR una meta con fecha vencida, o MOVER una existente al pasado.
+        ya_estaba_guardada = self.instance.pk and self.instance.fecha_limite == fecha
+        if fecha < mes_actual and not ya_estaba_guardada:
+            raise forms.ValidationError('La fecha límite no puede ser un mes que ya pasó.')
+        return fecha
 
     def clean(self):
         cleaned = super().clean()

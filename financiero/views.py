@@ -21,13 +21,13 @@ CAMPOS_EXTRA = [
     ('ing_informal',              'Ingreso informal',       '💰'),
     ('bonif_monto',               'Bonificación',           '🎁'),
     ('gasto_alimentos',           'Alimentos',              '🍔'),
-    ('gasto_vestido',             'Vestido',                '👗'),
+    ('gasto_vestido',             'Ropa',                   '👗'),
     ('gasto_vivienda_servicios',  'Vivienda y servicios',   '🏠'),
     ('gasto_salud',               'Salud',                  '💊'),
     ('gasto_transporte',          'Transporte',             '🚌'),
     ('gasto_comunicaciones',      'Comunicaciones',         '📱'),
     ('gasto_educacion',           'Educación',              '🎓'),
-    ('gasto_otros_bienes',        'Otros bienes',           '🛒'),
+    ('gasto_otros_bienes',        'Otros gastos',           '🛒'),
 ]
 
 
@@ -374,8 +374,8 @@ def analisis(request):
 
     # Acumulado por categoría (suma de los meses de la ventana)
     categorias = {
-        'Alimentos': 0, 'Vestido': 0, 'Vivienda/Serv.': 0, 'Salud': 0,
-        'Transporte': 0, 'Comunicaciones': 0, 'Educación': 0, 'Otros': 0,
+        'Alimentos': 0, 'Ropa': 0, 'Vivienda/Serv.': 0, 'Salud': 0,
+        'Transporte': 0, 'Comunicaciones': 0, 'Educación': 0, 'Otros Gastos': 0,
     }
     for r in registros_ventana:
         for k, v in r.gastos_por_categoria().items():

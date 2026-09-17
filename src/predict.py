@@ -66,6 +66,22 @@ def cut_frac(cat: str) -> float:
     return MAX_CUT_BY_CAT.get(cat, MAX_CUT_FRAC)
 
 
+# Etiqueta de presentación de cada categoría de gasto, SOLO para lo que se le muestra
+# al usuario (nombre de la estrategia de recorte, categoría con mayor crecimiento). La
+# clave GASTO_X interna (features del modelo, columnas de la BD) no cambia en ningún
+# lado; solo difiere de un Title Case genérico para GASTO_VESTIDO y GASTO_OTROS_BIENES.
+_ETIQUETA_CATEGORIA = {
+    "GASTO_VESTIDO":      "Ropa",
+    "GASTO_OTROS_BIENES":  "Otros Gastos",
+}
+
+
+def etiqueta_categoria(clave_gasto: str) -> str:
+    return _ETIQUETA_CATEGORIA.get(
+        clave_gasto, clave_gasto.replace("GASTO_", "").replace("_", " ").title()
+    )
+
+
 # TIERS de recorte por prioridad: un especialista recorta primero lo más prescindible.
 # Dentro de cada tier el recorte se reparte de forma GRADUAL (proporcional a la capacidad),
 # SIN agotar una categoría antes de tocar las otras. Vivienda y alimentos van SIEMPRE al final.
@@ -365,7 +381,7 @@ def _opcion(user: dict, strat: dict, needed: float, prioridad: dict | None = Non
         rec = float(user.get(c, 0)) - opt[c]
         if rec > 0.5:
             reducciones.append({
-                "categoria": c.replace("GASTO_", "").replace("_", " ").title(),
+                "categoria": etiqueta_categoria(c),
                 "original": round(float(user.get(c, 0)), 2),
                 "sugerido": round(opt[c], 2),
                 "recorte": round(rec, 2),
@@ -624,7 +640,7 @@ def recommend(user: dict, meta: float | None = None, historial: list | None = No
     prioridad = _crecimiento_por_categoria(historial)
     categoria_previa = (anti_estatismo or {}).get("categoria_objetivo")
     cat_lider = _categoria_lider(prioridad, evitar=categoria_previa)
-    cat_tend = cat_lider.replace("GASTO_", "").replace("_", " ").title() if cat_lider else None
+    cat_tend = etiqueta_categoria(cat_lider) if cat_lider else None
 
     shap_top = shap_explain(user, top=3)
 

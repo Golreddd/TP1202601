@@ -110,16 +110,20 @@ class RegistroMensual(models.Model):
         return 0.0
 
     def gastos_por_categoria(self):
-        """Dict legible para templates y charts."""
+        """Dict legible para templates y charts.
+
+        Las etiquetas 'Ropa' y 'Otros Gastos' son solo de presentación — el campo
+        interno sigue siendo gasto_vestido/gasto_otros_bienes (y GASTO_VESTIDO/
+        GASTO_OTROS_BIENES en el motor ML, sin tocar)."""
         return {
             'Alimentos':       float(self.gasto_alimentos),
-            'Vestido':         float(self.gasto_vestido),
+            'Ropa':            float(self.gasto_vestido),
             'Vivienda/Serv.':  float(self.gasto_vivienda_servicios),
             'Salud':           float(self.gasto_salud),
             'Transporte':      float(self.gasto_transporte),
             'Comunicaciones':  float(self.gasto_comunicaciones),
             'Educación':       float(self.gasto_educacion),
-            'Otros':           float(self.gasto_otros_bienes),
+            'Otros Gastos':    float(self.gasto_otros_bienes),
         }
 
     def to_user_dict(self):

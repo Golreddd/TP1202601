@@ -1,6 +1,13 @@
 from django.contrib.auth.models import AbstractUser
 from django.db import models
 
+from accounts.validators import (
+    validar_dominio_email,
+    validar_formato_nickname,
+    validar_mayor_de_edad,
+    validar_telefono_peru,
+)
+
 
 class Rol(models.Model):
     """
@@ -58,12 +65,16 @@ class Usuario(AbstractUser):
     ]
 
     # ── Identificación ────────────────────────────────────────────────────────
-    email    = models.EmailField(unique=True, verbose_name='Correo electrónico')
+    email    = models.EmailField(
+        unique=True, verbose_name='Correo electrónico',
+        validators=[validar_dominio_email],
+    )
     nickname = models.CharField(
         max_length=30,
         unique=True,
         verbose_name='Nickname',
-        help_text='Nombre de usuario visible. Máx 30 caracteres.',
+        help_text='Nombre de usuario visible. Entre 3 y 20 caracteres, con al menos una letra.',
+        validators=[validar_formato_nickname],
     )
 
     # ── Control de acceso ─────────────────────────────────────────────────────
@@ -81,6 +92,7 @@ class Usuario(AbstractUser):
         null=True, blank=True,
         verbose_name='Edad (años)',
         help_text='Requerido para el análisis ML.',
+        validators=[validar_mayor_de_edad],
     )
     nivel_educ = models.PositiveSmallIntegerField(
         choices=NIVEL_EDUC_CHOICES,
@@ -95,7 +107,10 @@ class Usuario(AbstractUser):
     )
 
     # ── Contacto (solo UI, no usados en ML) ──────────────────────────────────
-    telefono = models.CharField(max_length=20, blank=True, default='', verbose_name='Teléfono')
+    telefono = models.CharField(
+        max_length=20, blank=True, default='', verbose_name='Teléfono',
+        validators=[validar_telefono_peru],
+    )
     ciudad   = models.CharField(max_length=100, blank=True, default='Lima', verbose_name='Ciudad')
 
     USERNAME_FIELD  = 'email'

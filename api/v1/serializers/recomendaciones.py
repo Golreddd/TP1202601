@@ -50,6 +50,21 @@ class MetaLargoPlazoSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError('El monto ahorrado no puede ser negativo.')
         return value
 
+    def validate_fecha_limite(self, value):
+        # No puede ser una regla a nivel de modelo (depende de date.today(), no de un
+        # límite fijo) — mismo criterio que MetaLargoPlazoForm.clean_fecha_limite: se
+        # deja pasar una fecha ya vencida solo si es la misma que la meta ya tenía
+        # guardada (no bloquea editar otros campos de una meta ya vieja).
+        if not value:
+            return value
+        from datetime import date
+        hoy = date.today()
+        mes_actual = date(hoy.year, hoy.month, 1)
+        ya_estaba_guardada = self.instance and self.instance.fecha_limite == value
+        if value < mes_actual and not ya_estaba_guardada:
+            raise serializers.ValidationError('La fecha límite no puede ser un mes que ya pasó.')
+        return value
+
 
 # ── Resultado ML ──────────────────────────────────────────────────────────────
 

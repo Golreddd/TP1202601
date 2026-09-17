@@ -162,8 +162,8 @@ class AnalisisView(APIView):
 
         registros = list(reversed(registros))
 
-        categorias = ['Alimentos', 'Vestido', 'Vivienda/Serv.', 'Salud',
-                      'Transporte', 'Comunicaciones', 'Educación', 'Otros']
+        categorias = ['Alimentos', 'Ropa', 'Vivienda/Serv.', 'Salud',
+                      'Transporte', 'Comunicaciones', 'Educación', 'Otros Gastos']
         campos = ['gasto_alimentos', 'gasto_vestido', 'gasto_vivienda_servicios',
                   'gasto_salud', 'gasto_transporte', 'gasto_comunicaciones',
                   'gasto_educacion', 'gasto_otros_bienes']

@@ -87,11 +87,14 @@ def progreso(request):
             .order_by('-periodo').first()
         )
     if plan_activo and registro_actual_plan:
+        # Debe coincidir EXACTO con las claves de RegistroMensual.gastos_por_categoria():
+        # más abajo se hace gastos_reales.get(label, 0.0), así que si estas etiquetas se
+        # desalinean, esa categoría "pierde" silenciosamente su gasto real (siempre 0).
         MAPA_LABEL = {
-            'GASTO_ALIMENTOS': 'Alimentos', 'GASTO_VESTIDO': 'Vestido',
+            'GASTO_ALIMENTOS': 'Alimentos', 'GASTO_VESTIDO': 'Ropa',
             'GASTO_VIVIENDA_SERVICIOS': 'Vivienda/Serv.', 'GASTO_SALUD': 'Salud',
             'GASTO_TRANSPORTE': 'Transporte', 'GASTO_COMUNICACIONES': 'Comunicaciones',
-            'GASTO_EDUCACION': 'Educación', 'GASTO_OTROS_BIENES': 'Otros',
+            'GASTO_EDUCACION': 'Educación', 'GASTO_OTROS_BIENES': 'Otros Gastos',
         }
         MAPA_ICONO = {
             'GASTO_ALIMENTOS': '🍽️', 'GASTO_VESTIDO': '👕',

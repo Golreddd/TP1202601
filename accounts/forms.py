@@ -1,15 +1,9 @@
-import re
-
 from django import forms
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 
 from accounts.models import Usuario
-
-# Formato admitido para el nickname: 3-30 caracteres, letras (con acentos y ñ),
-# números, espacio, punto, guion y guion bajo. Sin esto se aceptaba cualquier
-# cadena —incluida "!!!@@@###"— como nombre de usuario visible.
-NICKNAME_RE = re.compile(r'[\w.\- ]{3,30}', re.UNICODE)
+from accounts.validators import validar_dominio_email, validar_formato_nickname
 
 
 def _aplicar_validadores_password(form, campo: str, password: str, usuario=None):
@@ -31,12 +25,16 @@ def _aplicar_validadores_password(form, campo: str, password: str, usuario=None)
 
 class RegistroForm(forms.Form):
     nickname = forms.CharField(
-        max_length=30,
+        max_length=20,
         label='Nickname',
-        widget=forms.TextInput(attrs={'class': 'form-input', 'placeholder': 'Tu nombre de usuario'}),
+        validators=[validar_formato_nickname],
+        widget=forms.TextInput(attrs={
+            'class': 'form-input', 'placeholder': 'Tu nombre de usuario', 'maxlength': 20,
+        }),
     )
     email = forms.EmailField(
         label='Correo electrónico',
+        validators=[validar_dominio_email],
         widget=forms.EmailInput(attrs={'class': 'form-input', 'placeholder': 'tu@correo.com'}),
     )
     password = forms.CharField(
@@ -49,10 +47,10 @@ class RegistroForm(forms.Form):
         widget=forms.PasswordInput(attrs={'class': 'form-input', 'placeholder': '••••••••'}),
     )
     edad = forms.IntegerField(
-        min_value=16, max_value=80,
+        min_value=18, max_value=80,
         required=False,
         label='Edad',
-        widget=forms.NumberInput(attrs={'class': 'form-input', 'placeholder': 'Ej: 25'}),
+        widget=forms.NumberInput(attrs={'class': 'form-input', 'placeholder': 'Ej: 25', 'min': 18, 'max': 80}),
     )
     nivel_educ = forms.ChoiceField(
         choices=[('', 'Selecciona tu nivel…')] + list(Usuario.NIVEL_EDUC_CHOICES),
@@ -62,18 +60,18 @@ class RegistroForm(forms.Form):
     )
 
     def clean_email(self):
+        # El formato (incluido el dominio) ya lo valida validar_dominio_email en el
+        # propio campo; aquí solo queda la unicidad, que no puede expresarse como
+        # validator porque depende de una consulta.
         email = self.cleaned_data['email'].lower()
         if Usuario.objects.filter(email=email).exists():
             raise forms.ValidationError('Este correo ya está registrado.')
         return email
 
     def clean_nickname(self):
+        # El formato (charset, letra obligatoria, no repetido) ya lo valida
+        # validar_formato_nickname en el propio campo.
         nickname = self.cleaned_data['nickname'].strip()
-        if not NICKNAME_RE.fullmatch(nickname):
-            raise forms.ValidationError(
-                'El nickname solo puede contener letras, números, espacios, punto, '
-                'guion y guion bajo (mínimo 3 caracteres).'
-            )
         if Usuario.objects.filter(nickname__iexact=nickname).exists():
             raise forms.ValidationError('Este nickname ya está en uso.')
         return nickname
@@ -99,14 +97,23 @@ class RegistroForm(forms.Form):
 
 
 class PerfilForm(forms.ModelForm):
-    """Información personal del usuario (nickname, email, teléfono, ciudad)."""
+    """Información personal del usuario (nickname, email, teléfono, ciudad).
+
+    El formato de nickname/email/teléfono ya lo validan validar_formato_nickname /
+    validar_dominio_email / validar_telefono_peru, declarados en el propio campo del
+    modelo (Usuario): al ser un ModelForm, Django los ejecuta solo con instance.full_clean()
+    en el _post_clean(), sin que este formulario tenga que repetirlos.
+    """
     class Meta:
         model = Usuario
         fields = ['nickname', 'email', 'telefono', 'ciudad']
         widgets = {
-            'nickname': forms.TextInput(attrs={'class': 'form-input'}),
+            'nickname': forms.TextInput(attrs={'class': 'form-input', 'maxlength': 20}),
             'email':    forms.EmailInput(attrs={'class': 'form-input'}),
-            'telefono': forms.TextInput(attrs={'class': 'form-input', 'placeholder': '+51 999 000 000'}),
+            'telefono': forms.TextInput(attrs={
+                'class': 'form-input', 'placeholder': '987654321', 'maxlength': 9,
+                'inputmode': 'numeric', 'pattern': '[0-9]{9}',
+            }),
             'ciudad':   forms.TextInput(attrs={'class': 'form-input'}),
         }
 
@@ -119,11 +126,6 @@ class PerfilForm(forms.ModelForm):
 
     def clean_nickname(self):
         nickname = self.cleaned_data['nickname'].strip()
-        if not NICKNAME_RE.fullmatch(nickname):
-            raise forms.ValidationError(
-                'El nickname solo puede contener letras, números, espacios, punto, '
-                'guion y guion bajo (mínimo 3 caracteres).'
-            )
         qs = Usuario.objects.filter(nickname__iexact=nickname).exclude(pk=self.instance.pk)
         if qs.exists():
             raise forms.ValidationError('Este nickname ya está en uso.')
@@ -136,7 +138,7 @@ class PerfilMLForm(forms.ModelForm):
         model = Usuario
         fields = ['edad', 'nivel_educ', 'miembros_hogar']
         widgets = {
-            'edad':           forms.NumberInput(attrs={'class': 'form-input', 'min': 16, 'max': 80}),
+            'edad':           forms.NumberInput(attrs={'class': 'form-input', 'min': 18, 'max': 80}),
             'nivel_educ':     forms.Select(attrs={'class': 'form-input'}),
             'miembros_hogar': forms.NumberInput(attrs={'class': 'form-input', 'min': 1, 'max': 20}),
         }

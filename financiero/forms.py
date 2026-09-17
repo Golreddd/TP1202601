@@ -46,6 +46,14 @@ class RegistroMensualForm(forms.ModelForm):
             'gasto_educacion':         forms.NumberInput(attrs={**INPUT, 'min': 0, 'step': '0.01'}),
             'gasto_otros_bienes':      forms.NumberInput(attrs={**INPUT, 'min': 0, 'step': '0.01'}),
         }
+        # Solo la ETIQUETA visible cambia (el campo sigue siendo gasto_vestido /
+        # gasto_otros_bienes en el modelo y en el motor ML, sin tocar). Se
+        # sobreescribe aquí en vez de en el verbose_name del modelo para no
+        # necesitar una migración.
+        labels = {
+            'gasto_vestido':      'Ropa (S/)',
+            'gasto_otros_bienes': 'Otros gastos (S/)',
+        }
 
     def clean_periodo(self):
         value = self.cleaned_data.get('periodo', '')

@@ -57,10 +57,11 @@ class UsuarioRegistroSerializer(serializers.ModelSerializer):
         return value.lower()
 
     def validate_nickname(self, value):
+        # El formato (charset, letra obligatoria, no repetido, 3-20 caracteres) ya lo
+        # aplica validar_formato_nickname, heredado del campo del modelo porque este
+        # es un ModelSerializer: aquí solo queda la unicidad.
         if Usuario.objects.filter(nickname__iexact=value).exists():
             raise serializers.ValidationError('Este nickname ya está en uso.')
-        if len(value) < 3:
-            raise serializers.ValidationError('El nickname debe tener al menos 3 caracteres.')
         return value
 
     def validate_password(self, value):
@@ -107,8 +108,10 @@ class UsuarioUpdateSerializer(serializers.ModelSerializer):
         return value
 
     def validate_edad(self, value):
-        if value is not None and (value < 15 or value > 80):
-            raise serializers.ValidationError('Edad debe estar entre 15 y 80 años.')
+        # El mínimo de 18 años ya lo aplica validar_mayor_de_edad, heredado del
+        # campo del modelo; aquí solo queda un techo razonable.
+        if value is not None and value > 80:
+            raise serializers.ValidationError('Ingresa una edad válida.')
         return value
 
     def validate_miembros_hogar(self, value):
