@@ -2,9 +2,11 @@ from django.contrib.auth.models import AbstractUser
 from django.db import models
 
 from accounts.validators import (
+    validar_ciudad,
     validar_dominio_email,
     validar_formato_nickname,
     validar_mayor_de_edad,
+    validar_miembros_hogar,
     validar_telefono_peru,
 )
 
@@ -104,6 +106,7 @@ class Usuario(AbstractUser):
         default=1,
         verbose_name='Miembros del hogar',
         help_text='Requerido para el análisis ML.',
+        validators=validar_miembros_hogar,
     )
 
     # ── Contacto (solo UI, no usados en ML) ──────────────────────────────────
@@ -111,7 +114,10 @@ class Usuario(AbstractUser):
         max_length=20, blank=True, default='', verbose_name='Teléfono',
         validators=[validar_telefono_peru],
     )
-    ciudad   = models.CharField(max_length=100, blank=True, default='Lima', verbose_name='Ciudad')
+    ciudad   = models.CharField(
+        max_length=100, blank=True, default='Lima', verbose_name='Ciudad',
+        validators=[validar_ciudad],
+    )
 
     USERNAME_FIELD  = 'email'
     REQUIRED_FIELDS = ['username', 'nickname']

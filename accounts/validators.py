@@ -8,7 +8,7 @@ recomendaciones/models.py para no depender de que cada formulario repita la regl
 import re
 
 from django.core.exceptions import ValidationError
-from django.core.validators import MinValueValidator, RegexValidator
+from django.core.validators import MaxValueValidator, MinValueValidator, RegexValidator
 
 # ── Nickname ────────────────────────────────────────────────────────────────────
 # Antes solo se validaba el charset (letras, números, espacio, punto, guion, guion
@@ -63,3 +63,24 @@ validar_telefono_peru = RegexValidator(
     regex=r'^\d{9}$',
     message='El teléfono debe tener exactamente 9 dígitos numéricos (ej: 987654321).',
 )
+
+# ── Miembros del hogar ───────────────────────────────────────────────────────────
+# PositiveSmallIntegerField permite 0 pese al nombre (Django solo exige >=0, no
+# >=1) — un hogar no puede tener 0 integrantes: como mínimo, el propio usuario.
+# El tope de 20 ya lo exigía el serializer de la API; se agrega aquí también para
+# que quede parejo en modelo/formulario/API en vez de duplicado en un solo lado.
+validar_miembros_hogar = [
+    MinValueValidator(1, message='El hogar debe tener al menos 1 miembro (tú mismo).'),
+    MaxValueValidator(20, message='Ingresa un número de miembros del hogar válido.'),
+]
+
+# ── Ciudad ───────────────────────────────────────────────────────────────────────
+# Solo letras (incluye tildes/ñ), espacios, apóstrofes y guiones — para nombres
+# compuestos como "Villa El Salvador" o "San Juan de Lurigancho". Sin dígitos ni
+# símbolos sueltos.
+CIUDAD_RE = re.compile(r"^[A-Za-zÀ-ÖØ-öø-ÿ][A-Za-zÀ-ÖØ-öø-ÿ\s'\-]*$", re.UNICODE)
+
+
+def validar_ciudad(ciudad: str) -> None:
+    if not CIUDAD_RE.fullmatch(ciudad or ''):
+        raise ValidationError('La ciudad solo puede contener letras, espacios y guiones.')
