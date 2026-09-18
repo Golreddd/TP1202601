@@ -95,14 +95,20 @@ a.nav-item.active,div.nav-item.active{background:rgba(59,130,246,.18);color:var(
 .user-role.admin{color:var(--accent);}
 
 /* ===== MAIN CONTENT ===== */
-.main{margin-left:260px;flex:1;display:flex;flex-direction:column;min-height:100vh;}
-.topbar{height:64px;background:var(--white);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 28px;gap:16px;position:sticky;top:0;z-index:50;box-shadow:0 1px 4px rgba(0,0,0,.06);}
-.topbar-title{font-size:18px;font-weight:700;color:var(--text);flex:1;}
+/* min-width:0 es el arreglo clasico de flexbox: por defecto un item flex no se
+   encoge mas alla del ancho minimo de su contenido (min-width:auto implicito), asi
+   que si algo adentro (tabla, select, texto largo) tiene un minimo natural mayor al
+   ancho real de pantalla, .main (y con el, TODA la app) se ensancha para acomodarlo
+   en vez de encogerse — este era el causante real de que cada pagina se viera
+   cortada por igual en movil, confirmado con document.querySelectorAll + scrollWidth. */
+.main{margin-left:260px;flex:1;min-width:0;display:flex;flex-direction:column;min-height:100vh;}
+.topbar{height:64px;background:var(--white);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 28px;gap:16px;position:sticky;top:0;z-index:50;box-shadow:0 1px 4px rgba(0,0,0,.06);min-width:0;}
+.topbar-title{font-size:18px;font-weight:700;color:var(--text);flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .topbar-actions{display:flex;align-items:center;gap:12px;}
 .icon-btn{width:38px;height:38px;border-radius:var(--radius-sm);border:1.5px solid var(--border);background:var(--white);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text2);font-size:16px;transition:all .2s;text-decoration:none;}
 .icon-btn:hover{border-color:var(--primary-light);color:var(--primary);}
 .streak-badge{background:linear-gradient(135deg,#f97316,#ef4444);color:#fff;font-size:12px;font-weight:700;padding:4px 10px;border-radius:20px;}
-.content{flex:1;padding:28px;}
+.content{flex:1;min-width:0;padding:28px;}
 
 /* ===== DJANGO MESSAGES ===== */
 .msg-alert{display:flex;align-items:center;gap:10px;padding:12px 18px;border-radius:var(--radius-sm);margin-bottom:16px;font-size:13.5px;font-weight:500;flex-wrap:wrap;}
@@ -116,6 +122,11 @@ a.nav-item.active,div.nav-item.active{background:rgba(59,130,246,.18);color:var(
 /* ===== CARDS ===== */
 .card{background:var(--card);border-radius:var(--radius);border:1px solid var(--border);box-shadow:var(--shadow);}
 .card-header{padding:20px 24px 0;display:flex;align-items:center;justify-content:space-between;}
+/* Variante para encabezados con titulo + una oracion de subtitulo debajo (no un
+   boton/tag corto al lado): .card-header por defecto es una FILA (titulo a la
+   izquierda, accion a la derecha) — con texto largo eso los aprieta uno junto al
+   otro y se corta en movil. .stack los apila verticalmente, como corresponde. */
+.card-header.stack{flex-direction:column;align-items:flex-start;}
 .card-title{font-size:15px;font-weight:700;color:var(--text);}
 .card-body{padding:20px 24px;}
 
@@ -162,7 +173,25 @@ a.nav-item.active,div.nav-item.active{background:rgba(59,130,246,.18);color:var(
 .chart-container.short{height:200px;}
 
 /* ===== TABLES ===== */
-.table-wrap{overflow-x:auto;}
+/* Tablas con muchas columnas (registros, admin) no siempre entran en una pantalla de
+   celular: se dejan deslizar de lado (comportamiento correcto), pero en movil el
+   navegador oculta la barra de scroll hasta que se toca, asi que nadie se entera de
+   que hay mas contenido a la derecha. Se agrega una sombra en el borde derecho -
+   "scroll shadow", con degradados en dos capas (local = se mueve con el contenido y
+   tapa la sombra al llegar al final; scroll = fija, siempre pegada al borde real) -
+   sin JS, desaparece sola cuando ya no queda nada por deslizar.
+   Fuente del patron: https://css-tricks.com/scroll-shadows-with-background-attachment-local/ */
+.table-wrap{
+  overflow-x:auto;
+  background:
+    linear-gradient(to right, var(--card) 30%, rgba(255,255,255,0)) 0 0,
+    linear-gradient(to right, rgba(255,255,255,0), var(--card) 70%) 100% 0,
+    linear-gradient(to right, rgba(15,23,42,.16), rgba(15,23,42,0)) 0 0,
+    linear-gradient(to left, rgba(15,23,42,.16), rgba(15,23,42,0)) 100% 0;
+  background-repeat:no-repeat;
+  background-size:36px 100%, 36px 100%, 14px 100%, 14px 100%;
+  background-attachment:local, local, scroll, scroll;
+}
 table{width:100%;border-collapse:collapse;}
 thead th{background:var(--bg);font-size:12px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;padding:12px 16px;text-align:left;border-bottom:1px solid var(--border);}
 tbody tr{transition:background .15s;}
@@ -435,6 +464,17 @@ html,body{overflow-x:hidden;}
   .chart-container.tall{height:260px;}
   /* Botones de acción en filas de tabla / grupos no se montan */
   .flex.gap-3.justify-end{flex-wrap:wrap;}
+  /* Aviso explícito de que la tabla se puede deslizar (además de la sombra de
+     arriba) — en el celular real cuesta notar que hay más columnas a la derecha. */
+  .table-wrap::before{
+    content:'⟷ Desliza para ver más';
+    display:block;
+    font-size:11px;
+    font-weight:600;
+    color:var(--text3);
+    text-align:right;
+    padding:6px 14px 4px;
+  }
 }
 
 /* Móvil pequeño */

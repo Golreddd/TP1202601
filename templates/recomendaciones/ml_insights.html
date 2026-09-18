@@ -69,7 +69,7 @@
 {% if tendencia %}
 <!-- ===== ANÁLISIS DE TENDENCIA MULTI-MES ===== -->
 <div class="card mb-6">
-  <div class="card-header mb-4">
+  <div class="card-header stack mb-4">
     <div class="card-title">📈 Análisis de Tendencia · {{ tendencia.n_meses }} meses</div>
     <div class="text-sm text-muted" style="margin-top:4px;">
       Cómo evoluciona tu ahorro a lo largo de tu historial (no solo el último mes).
@@ -125,7 +125,7 @@
 <!-- Historial -->
 {% if total_analisis > 1 %}
 <div class="card">
-  <div class="card-header mb-4">
+  <div class="card-header stack mb-4">
     <div class="card-title">📅 Historial de Análisis <span class="text-sm text-muted">({{ total_analisis }} en total)</span></div>
     <div class="text-sm text-muted" style="margin-top:4px;">
       Cada análisis corresponde al <strong>mes que elegiste</strong>: la clasificación y el plan son del mismo mes. Haz clic en un análisis para ver sus recomendaciones completas.
