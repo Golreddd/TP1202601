@@ -1,44 +1,46 @@
 # -*- coding: utf-8 -*-
 """
-Pruebas estadisticas para el paper (observacion 5).
+Comparacion de algoritmos y pruebas estadisticas sobre el CONJUNTO DE VALIDACION (20 %).
 
-Calcula sobre el CONJUNTO DE VALIDACION:
-  1. Intervalos de confianza al 95 % (bootstrap percentil) de Accuracy, Precision,
-     Recall, F1 y AUC-ROC para Logistic Regression, Random Forest y XGBoost.
-  2. Test de DeLong para comparar AUC entre modelos (correlacionado, mismo conjunto).
-  3. Test de McNemar para comparar las clasificaciones (aciertos/errores pareados).
-  4. Bootstrap pareado para la diferencia de F1.
+Comparacion equivalente (observacion del revisor):
+  - Logistic Regression y Random Forest se ajustan con el MISMO procedimiento que
+    XGBoost: Optuna (TPE, 40 trials, semilla 42) maximizando macro-F1 por CV 3-fold
+    SOLO sobre el 80 % de entrenamiento, con el mismo escalado.
+  - XGBoost es el modelo de produccion (models/xgb_clf_model.pkl), ajustado con ese
+    mismo protocolo en src/train.py.
+  - El 20 % de validacion solo se usa aqui, una vez, para evaluar.
 
-Uso:
-    python -m src.stats_tests
-    python -m src.stats_tests --n-boot 2000 --seed 42
+Calcula sobre la validacion:
+  1. Metricas (Accuracy, Precision, Recall, F1, AUC-ROC, MCC) de los tres modelos e
+     IC 95 % bootstrap (2,000 repeticiones).
+  2. DeLong (AUC), McNemar (aciertos pareados) y bootstrap pareado de F1.
 
-Salida: tabla por consola y archivo models/stats_tests.json
+Uso:   python -m src.stats_tests
+Salida: models/stats_tests.json
 """
 from __future__ import annotations
 
 import argparse
 import json
+import warnings
 from pathlib import Path
 
+import joblib
 import numpy as np
-import pandas as pd
+import optuna
 from scipy import stats
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import (accuracy_score, f1_score, precision_score,
-                             recall_score, roc_auc_score)
+from sklearn.metrics import (accuracy_score, f1_score, matthews_corrcoef,
+                             precision_score, recall_score, roc_auc_score)
+from sklearn.model_selection import StratifiedKFold
 from sklearn.preprocessing import StandardScaler
 
-from .preprocessing import add_features, binary_target, referential_features
-from .train import _MODELS, _ROOT, _clf, _split
+from .train import N_TRIALS, RANDOM_STATE, _MODELS, _split, load_xy
 
-# Dataset YA LIMPIO (salida de clean_dataset, no el crudo dataset2.csv que no se
-# versiona): mismo n_total=9527 que reporta models/metrics.json. NO se le vuelve a
-# aplicar clean_dataset() aqui -- winsorizar/filtrar IQR una segunda vez sobre datos
-# ya limpios recorta de mas (9527 -> 6950) y deja de coincidir con el split real
-# (7621/1906, 80/20) con el que se entreno el modelo que esta desplegado.
-_DATASET_LIMPIO = _ROOT / "dataset_final_limpio.csv"
+warnings.filterwarnings("ignore")
+optuna.logging.set_verbosity(optuna.logging.WARNING)
+
 
 # --------------------------------------------------------------------------
 # DeLong (Sun & Xu, 2014): varianza del AUC y test para AUCs correlacionados
@@ -172,93 +174,91 @@ def paired_bootstrap_f1(y, pred_a, pred_b, n_boot=2000, seed=42):
 
 
 # --------------------------------------------------------------------------
+# Ajuste de hiperparametros de LR y RF (mismo protocolo que XGBoost)
+# --------------------------------------------------------------------------
+
+def _lr(p):
+    return LogisticRegression(C=p["C"], penalty=p["penalty"], solver="liblinear",
+                              max_iter=5000, random_state=RANDOM_STATE)
+
+
+def _rf(p):
+    return RandomForestClassifier(n_estimators=p["n_estimators"], max_depth=p["max_depth"],
+                                  min_samples_leaf=p["min_samples_leaf"],
+                                  max_features=p["max_features"],
+                                  random_state=RANDOM_STATE, n_jobs=-1)
+
+
+def _tune(builder, space, X, y, idx, n_trials=N_TRIALS):
+    def objective(t):
+        p = space(t)
+        skf = StratifiedKFold(3, shuffle=True, random_state=RANDOM_STATE)
+        sc_ = []
+        for a, b in skf.split(idx, y[idx]):
+            ia, ib = idx[a], idx[b]
+            s = StandardScaler().fit(X[ia])
+            m = builder(p).fit(s.transform(X[ia]), y[ia])
+            sc_.append(f1_score(y[ib], m.predict(s.transform(X[ib])), average="macro"))
+        return float(np.mean(sc_))
+    st = optuna.create_study(direction="maximize",
+                             sampler=optuna.samplers.TPESampler(seed=RANDOM_STATE))
+    st.optimize(objective, n_trials=n_trials, show_progress_bar=False)
+    return st.best_params, float(st.best_value)
+
+
+LR_SPACE = lambda t: {"C": t.suggest_float("C", 1e-3, 1e2, log=True),
+                      "penalty": t.suggest_categorical("penalty", ["l1", "l2"])}
+RF_SPACE = lambda t: {"n_estimators": t.suggest_int("n_estimators", 200, 800, step=100),
+                      "max_depth": t.suggest_int("max_depth", 3, 20),
+                      "min_samples_leaf": t.suggest_int("min_samples_leaf", 1, 30),
+                      "max_features": t.suggest_categorical("max_features", ["sqrt", "log2", 0.5])}
+
 
 def main(n_boot=2000, seed=42):
-    df = pd.read_csv(str(_DATASET_LIMPIO))
-    df = add_features(df)
-    y = binary_target(df)
-    feats = referential_features(df)
-    X = df[feats].astype(float).values
-    tr, va = _split(y)
-    sc = StandardScaler().fit(X[tr])
-    Xs = sc.transform(X)
-    y_va = y[va]
+    _, feats, Xdf, y = load_xy()
+    X = Xdf.astype(float).values
+    tr, te = _split(y)
+    y_te = y[te]
 
-    # --- hiperparametros de XGBoost ya optimizados
-    with open(_MODELS / "xgb_best_params.json", encoding="utf-8") as f:
-        best = json.load(f)
-    hp = {k: v for k, v in best.items()
-          if k not in ("objective", "early_stopping_rounds",
-                       "n_estimators_max", "n_arboles_usados")}
-    hp["n_estimators"] = best.get("n_estimators_max", 1500)
+    sc = joblib.load(_MODELS / "scaler.pkl")
+    xgb = joblib.load(_MODELS / "xgb_clf_model.pkl")
+    Xs = sc.transform(Xdf)
 
-    modelos = {}
-    xgb = _clf(early_stopping=True, **hp)
-    xgb.fit(Xs[tr], y[tr], eval_set=[(Xs[va], y[va])], verbose=False)
-    modelos["XGBoost"] = xgb
+    best_lr, cv_lr = _tune(_lr, LR_SPACE, X, y, tr)
+    best_rf, cv_rf = _tune(_rf, RF_SPACE, X, y, tr)
+    lr = _lr(best_lr).fit(Xs[tr], y[tr])
+    rf = _rf(best_rf).fit(Xs[tr], y[tr])
+    modelos = {"Logistic Regression": lr, "Random Forest": rf, "XGBoost": xgb}
 
-    lr = LogisticRegression(max_iter=2000, C=1.0, random_state=seed)
-    lr.fit(Xs[tr], y[tr])
-    modelos["Logistic Regression"] = lr
+    pred = {k: m.predict(Xs[te]) for k, m in modelos.items()}
+    prob = {k: m.predict_proba(Xs[te])[:, 1] for k, m in modelos.items()}
 
-    rf = RandomForestClassifier(n_estimators=500, min_samples_leaf=2,
-                                random_state=seed, n_jobs=-1)
-    rf.fit(Xs[tr], y[tr])
-    modelos["Random Forest"] = rf
+    rep = {"n_valid": int(len(y_te)), "n_boot": n_boot, "seed": seed,
+           "baseline_clase_mayoritaria": float(max(y_te.mean(), 1 - y_te.mean())),
+           "hiperparametros": {"Logistic Regression": {**best_lr, "cv_macro_f1": cv_lr},
+                               "Random Forest": {**best_rf, "cv_macro_f1": cv_rf}},
+           "metricas": {}, "delong": {}, "mcnemar": {}, "bootstrap_f1": {}}
 
-    pred = {k: m.predict(Xs[va]) for k, m in modelos.items()}
-    prob = {k: m.predict_proba(Xs[va])[:, 1] for k, m in modelos.items()}
-
-    rep = {"n_valid": int(len(y_va)), "n_boot": n_boot, "seed": seed,
-           "puntual_e_ic": {}, "delong": {}, "mcnemar": {}, "bootstrap_f1": {}}
-
-    print(f"\nConjunto de validacion: n = {len(y_va)} | bootstrap: {n_boot} repeticiones\n")
-    print("=" * 78)
-    print("1) METRICAS PUNTUALES E INTERVALOS DE CONFIANZA AL 95 %")
-    print("=" * 78)
+    print(f"\nValidacion: n = {len(y_te)} | LR {best_lr} | RF {best_rf}\n")
     for nombre in modelos:
-        m = _metrics(y_va, pred[nombre], prob[nombre])
-        ci = bootstrap_ci(y_va, pred[nombre], prob[nombre], n_boot, seed)
-        rep["puntual_e_ic"][nombre] = {k: {"valor": float(m[k]), **ci[k]} for k in m}
-        print(f"\n{nombre}")
-        for k in ["accuracy", "precision", "recall", "f1", "roc_auc"]:
-            print(f"   {k:10s} {m[k]:.3f}   IC 95 % [{ci[k]['ci_low']:.3f} - {ci[k]['ci_high']:.3f}]")
+        m = _metrics(y_te, pred[nombre], prob[nombre])
+        m["mcc"] = matthews_corrcoef(y_te, pred[nombre])
+        ci = bootstrap_ci(y_te, pred[nombre], prob[nombre], n_boot, seed)
+        rep["metricas"][nombre] = {k: {"valor": float(v), **ci.get(k, {})} for k, v in m.items()}
+        print(nombre, "  ".join(f"{k}={v:.3f}" for k, v in m.items()))
 
-    pares = [("XGBoost", "Logistic Regression"), ("XGBoost", "Random Forest"),
-             ("Random Forest", "Logistic Regression")]
-
-    print("\n" + "=" * 78)
-    print("2) TEST DE DeLONG PARA AUC-ROC (muestras correlacionadas)")
-    print("=" * 78)
-    for a, b in pares:
-        auc_a, auc_b, p = delong_test(y_va, prob[a], prob[b])
-        sig = "SIGNIFICATIVA" if p < 0.05 else "no significativa"
+    for a, b in [("XGBoost", "Logistic Regression"), ("XGBoost", "Random Forest")]:
+        auc_a, auc_b, p = delong_test(y_te, prob[a], prob[b])
         rep["delong"][f"{a} vs {b}"] = {"auc_a": auc_a, "auc_b": auc_b,
                                         "diferencia": auc_a - auc_b, "p_value": p}
-        print(f"   {a} ({auc_a:.3f}) vs {b} ({auc_b:.3f}): "
-              f"dif = {auc_a - auc_b:+.4f}, p = {p:.4f} -> {sig}")
-
-    print("\n" + "=" * 78)
-    print("3) TEST DE McNEMAR PARA LA CLASIFICACION")
-    print("=" * 78)
-    for a, b in pares:
-        nb, nc, p, metodo = mcnemar_test(y_va, pred[a], pred[b])
-        sig = "SIGNIFICATIVA" if p < 0.05 else "no significativa"
+        nb, nc, pm, met = mcnemar_test(y_te, pred[a], pred[b])
         rep["mcnemar"][f"{a} vs {b}"] = {"solo_a_acierta": nb, "solo_b_acierta": nc,
-                                         "p_value": p, "metodo": metodo}
-        print(f"   {a} vs {b}: solo {a} acierta = {nb}, solo {b} acierta = {nc}, "
-              f"p = {p:.4f} ({metodo}) -> {sig}")
-
-    print("\n" + "=" * 78)
-    print("4) BOOTSTRAP PAREADO PARA LA DIFERENCIA DE F1")
-    print("=" * 78)
-    for a, b in pares:
-        obs, lo, hi, p = paired_bootstrap_f1(y_va, pred[a], pred[b], n_boot, seed)
-        sig = "SIGNIFICATIVA" if (lo > 0 or hi < 0) else "no significativa"
+                                         "p_value": pm, "metodo": met}
+        obs, lo, hi, pf = paired_bootstrap_f1(y_te, pred[a], pred[b], n_boot, seed)
         rep["bootstrap_f1"][f"{a} vs {b}"] = {"diferencia": obs, "ci_low": lo,
-                                              "ci_high": hi, "p_value": p}
-        print(f"   {a} vs {b}: dif F1 = {obs:+.4f}, "
-              f"IC 95 % [{lo:+.4f} - {hi:+.4f}], p = {p:.4f} -> {sig}")
+                                              "ci_high": hi, "p_value": pf}
+        print(f"{a} vs {b}: DeLong dif={auc_a-auc_b:+.4f} p={p:.4f} | McNemar p={pm:.4f} "
+              f"| F1 dif={obs:+.4f} IC[{lo:+.4f},{hi:+.4f}] p={pf:.4f}")
 
     salida = Path(_MODELS) / "stats_tests.json"
     with open(salida, "w", encoding="utf-8") as f:

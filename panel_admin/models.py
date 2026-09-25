@@ -68,8 +68,9 @@ class ValidacionPrimerUso(models.Model):
     Caso de prueba con usuarios reales: la PRIMERA clasificación ML de cada usuario,
     contrastada con su ahorro real del mismo mes (identidad ingreso − gasto).
 
-    El modelo se entrena con split 80/20 (train/valid, sin test); estos registros
-    hacen las veces de conjunto de prueba. Se captura UNA sola vez por usuario
+    El modelo se entrena con split 80/20 (entrenamiento/validación; el 20 % no
+    interviene en el entrenamiento); estos registros constituyen la prueba del
+    sistema con datos nuevos de usuarios reales. Se captura UNA sola vez por usuario
     (OneToOne) y no se recalcula aunque el usuario edite o repita el análisis.
     Clase positiva = Ahorra (1).
     """

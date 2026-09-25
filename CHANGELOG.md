@@ -1,8 +1,8 @@
 # CHANGELOG — SmartSave / SIGAMOS
 
-Registro explícito de todos los cambios hechos en esta sesión de trabajo, organizados por tema. Para cada uno: qué cambió, en qué archivos, y por qué.
+Registro explícito de los cambios hechos en las sesiones de trabajo con Claude Code, organizados por tema. Para cada uno: qué cambió, en qué archivos, y por qué. Se actualiza en cada tanda nueva de trabajo — la numeración de secciones es cronológica.
 
-> **Nota de alcance:** este documento cubre solo lo desarrollado en esta conversación. El repositorio tiene además otros cambios pendientes (panel de "Validación ML" en `panel_admin`, reentrenamiento del modelo en `src/train.py`, artefactos `.pkl` actualizados) que se hicieron fuera de esta sesión y no se detallan aquí porque no tengo visibilidad completa de esos cambios.
+> **Nota de alcance:** este documento cubre lo desarrollado en las conversaciones con Claude Code. Puede haber cambios hechos fuera de esas sesiones (por ejemplo directo en GitHub o en otro entorno) que no queden reflejados aquí si no hubo visibilidad completa de ellos.
 
 ---
 
@@ -189,7 +189,7 @@ Ambas se aplicaron y verificaron contra la base de datos de producción en Rende
 
 - Commit `d0f47cf` — *"feat: gamificacion ampliada, aportes a metas, mejoras en ML Insights y validaciones"* — agrupa los puntos 1 a 10 de este changelog (25 archivos, +1102/-215 líneas).
 - Push a `origin/main` en GitHub, lo que disparó el auto-deploy en Render: el `buildCommand` de `render.yaml` corre `migrate --no-input` automáticamente, así que las dos migraciones nuevas se aplicaron solas en producción.
-- Los cambios del punto 11 (Dashboard) y las correcciones de caché de CSS **aún no se han commiteado** — quedan pendientes de tu confirmación para el próximo push.
+- Commit `12df98f` — *"feat: dashboard interactivo, correcciones de UI y validacion ML con usuarios reales"* — agrupa el punto 11 (Dashboard), el reentrenamiento del modelo (`src/train.py` y artefactos `.pkl`) y el panel de "Validación ML con usuarios reales" (`panel_admin/models.py::ValidacionPrimerUso`, ver punto 16). Ya está en `origin/main`.
 
 ---
 
@@ -211,7 +211,122 @@ Tres archivos regenerados, todos derivados de una única fuente de verdad constr
 
 ---
 
-## Resumen de archivos tocados en esta sesión
+## 16. Panel Admin — Evolución de la tasa de ahorro por usuario
+
+**Archivos:** `panel_admin/views.py`, `panel_admin/urls.py`, `templates/panel_admin/evolucion_ahorro.html`, `templates/base.html`
+
+- Nueva pestaña de administración: para cada usuario, calcula el % de ahorro (ahorro / ingreso) desde su **primer** registro mensual, en columnas fijas **Mes 1 a Mes 10** — se completan solas conforme el usuario va registrando más meses (si supera 10, la tabla se extiende en vez de recortar).
+- Cálculo propio `_tasa()` con 2 decimales de precisión (distinto de la propiedad `tasa_ahorro` del modelo, que redondea a 1 decimal, para que la evolución mes a mes se note incluso en variaciones chicas).
+- Resumen agregado (promedio general, cuántos usuarios mejoraron/empeoraron su tasa) y filtro de búsqueda por nombre o correo.
+- Exportación a CSV con BOM y `;` como separador (para que Excel en español lo abra bien de una), auditada vía `AuditLog.registrar(accion='EXPORTAR_DATOS', ...)`.
+
+---
+
+## 17. Validaciones de seguridad y formato en el perfil del usuario
+
+**Archivos nuevos:** `accounts/validators.py`, `accounts/migrations/0003_alter_usuario_edad_alter_usuario_email_and_more.py`
+**Archivos modificados:** `accounts/models.py`, `accounts/forms.py`, `api/v1/serializers/accounts.py`
+
+Se creó `accounts/validators.py` como módulo único de validadores, adjuntos al **campo del modelo** (no solo al formulario web): así DRF los hereda automáticamente en los serializers (`ModelSerializer` copia los `validators` del campo al construirse), sin tener que repetir la regla en la web y en la API por separado.
+
+- **Nickname**: antes solo se validaba el charset — dejaba pasar nicknames como `"044444444404040404040409494049"` (puros números) o `"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"` (un solo carácter repetido). Ahora exige entre 3 y 20 caracteres, con al menos una letra, y rechaza el mismo carácter repetido.
+- **Edad**: antes no tenía **ningún** validador de servidor — solo el atributo `min`/`max` del HTML del widget, que no protege nada si se edita el POST a mano o se llama la API directo. Permitía registrar usuarios de 1 o 2 años. Ahora exige 18+ a nivel de modelo.
+- **Correo**: rechaza dominios evidentemente falsos como `"1@1.com"` o `"asdas.a@a.com"` (segundo nivel de dominio de una sola letra o puramente numérico), sin resolver DNS.
+- **Teléfono**: exactamente 9 dígitos numéricos (convención de celular en Perú).
+- Al revisar usuarios reales en producción se encontraron varias cuentas que coincidían exactamente con estos patrones de basura (nicknames como los de arriba, edades de 1-2 años, correos `1@1.com`, teléfonos como `"sexooooooo"`) — **no se modificaron ni eliminaron**, solo se reportaron. El punto de entrada más probable era la API: `UsuarioUpdateSerializer.validate_edad` aceptaba desde 15 años (más débil que el formulario web) y el registro por API casi no validaba formato de nickname. Con el validador a nivel de modelo, la API queda pareja con la web automáticamente, sin tocar los serializers.
+- Migración `0003_...`: 4 `AlterField` (edad, email, nickname, teléfono), confirmada con `sqlmigrate` como **no-op** — los validadores no tocan la estructura de la tabla.
+
+---
+
+## 18. Renombre de categorías de gasto (solo la etiqueta visible)
+
+**Archivos:** `financiero/models.py`, `financiero/views.py`, `financiero/forms.py`, `gamificacion/views.py`, `api/v1/views/financiero.py`, `src/predict.py`
+
+"Vestido" → "Ropa" y "Otros Bienes" → "Otros Gastos", **solo en lo que ve el usuario**. Los nombres internos de campo (`gasto_vestido`, `gasto_otros_bienes`) y las constantes del motor ML (`GASTO_VESTIDO`, `GASTO_OTROS_BIENES`) no se tocaron — cero riesgo sobre cálculos, migraciones o el modelo entrenado.
+
+El mismo texto se arma en varios lugares independientes que no comparten una sola fuente (el diccionario de `gastos_por_categoria()`, el mapa de presupuesto por categoría en gamificación, los `labels` del formulario de registro, la lista de categorías de la API, y un `etiqueta_categoria()` nuevo en `src/predict.py` para las recomendaciones) — se sincronizaron todos a mano, cada uno con un comentario de advertencia para que no se desalineen si se vuelve a tocar en el futuro.
+
+---
+
+## 19. Meta de largo plazo: no se puede fijar una fecha límite ya vencida
+
+**Archivos:** `recomendaciones/forms.py`, `api/v1/serializers/recomendaciones.py`
+
+- `MetaLargoPlazoForm.clean_fecha_limite` y `MetaLargoPlazoSerializer.validate_fecha_limite` rechazan un mes ya pasado, tanto al **crear** una meta nueva como al **mover** la fecha de una existente hacia atrás.
+- Con "cláusula de abuelo": si la meta ya tenía guardada esa misma fecha (no se tocó al editar otro campo), se deja pasar aunque haya quedado en el pasado desde entonces — solo se bloquea crear o mover una meta hacia el pasado, nunca se rompe la edición de una meta vieja que ya estaba vencida.
+
+---
+
+## 20. Mostrar/ocultar contraseña y bloqueo de letras en campos numéricos
+
+**Archivos:** `static/js/sigamos.js`
+
+- Ícono de ojo (👁️ / 🙈) agregado dinámicamente a **todo** `input[type=password]` del sistema (login, registro, restablecimiento, cambio de contraseña) desde un único script global — no requirió tocar ningún template, ya que todos ya cargan `sigamos.js`.
+- Los `input[type=number]` (como Edad) dejaban escribir `e`, `E`, `+`, `-` y quedaban con eso visible en el campo, porque son caracteres válidos de notación exponencial en HTML5. Ahora se bloquean esas teclas (y el punto decimal en campos que son enteros, como edad o miembros del hogar) tanto al teclear como al pegar texto, en todos los campos numéricos del sistema.
+
+---
+
+## 21. Corrección de responsive / vista móvil
+
+**Archivos:** `static/css/sigamos.css`, `static/js/sigamos.js`, `templates/base.html`, `templates/base_auth.html`, `templates/gamificacion/logros.html`, `templates/gamificacion/progreso.html`, `templates/financiero/analisis.html`, `templates/recomendaciones/ml_insights.html`, `templates/recomendaciones/_resultado_ml.html`, `templates/recomendaciones/_resultado_ml_js.html`
+
+Reportado en varias pantallas (Registros, ML Insights, Análisis de Gastos, Progreso, panel de administración) que el contenido se veía cortado en celular. Se resolvió en tres pasadas:
+
+**1. Arreglos puntuales** (necesarios, pero no resolvían el problema de fondo):
+- 6 tarjetas tenían `grid-template-columns` puesto como estilo **inline** (Logros, resumen de mes en ML Insights, métricas de resultado ML) — un estilo inline le gana a cualquier media query, así que esas grillas quedaban forzadas a 2-4 columnas sin importar el ancho de pantalla. Se movieron a clases CSS (`.grid-racha`, `.stats-grid-3`, `.achv-grid`, `.resumen-ml-grid`) que sí colapsan en móvil.
+- La leyenda del gráfico de dona (Análisis de Gastos, Dashboard) estaba fija "a la derecha"; pasa a "abajo" en pantallas ≤600px.
+- 6 tarjetas usaban `.card-header` (pensado para "título + botón corto al lado") para un título + una oración larga de subtítulo debajo, y quedaban apretadas en vez de apiladas. Nueva variante `.card-header.stack`.
+- El `<select>` de "Mes a analizar" en ML Insights tenía `min-width:420px` fijo, más ancho que cualquier celular.
+
+**2. Causa raíz real**, encontrada recorriendo el DOM con `document.querySelectorAll('*')` + comparando `scrollWidth`/`clientWidth` en la consola del navegador (la pasada anterior no la resolvía porque no era el problema): `.main` es un elemento flex dentro de `.app`, y por defecto un elemento flex **no se encoge más allá del ancho mínimo de su propio contenido** (`min-width:auto` implícito de la especificación). Como algo dentro de `.main` tenía un ancho mínimo natural mayor a la pantalla real, **toda** la app (topbar, contenido, tarjetas) se ensanchaba para acomodarlo en vez de encogerse al viewport — por eso se veía igual de cortada en absolutamente todas las páginas por igual. Se corrigió con `min-width:0` en `.main`, `.content` y `.topbar` (el arreglo estándar de este problema conocido de flexbox), más recorte con elipsis en el título de la topbar si no entra.
+  - En el camino se probó y **revirtió** un `overflow-wrap:anywhere` global en `<body>` (pensado para que correos largos no desbordaran en el panel de admin) que tuvo un efecto secundario severo: al combinarse con `table{width:100%}`, el navegador partía cada palabra de las tablas letra por letra en vertical en vez de dejarlas anchas con scroll. Detectado por captura de pantalla del usuario y revertido en la misma sesión.
+
+**3. Descubribilidad del scroll en tablas anchas** (Registros, tablas de admin): las tablas con muchas columnas no entran en una pantalla de celular y eso es esperado — se pueden deslizar de lado —, pero no había ninguna señal visual de que hubiera más contenido a la derecha. Se agregó una sombra en el borde derecho (con degradados en dos capas, 100% CSS, sin JS) más el texto "⟷ Desliza para ver más" en móvil.
+
+---
+
+## 22. Validación: miembros del hogar y ciudad
+
+**Archivos:** `accounts/validators.py`, `accounts/models.py`, `accounts/migrations/0004_alter_usuario_ciudad_alter_usuario_miembros_hogar.py`
+
+- `miembros_hogar` (`PositiveSmallIntegerField`) permitía 0 pese al nombre del tipo (en Django, "positive" solo exige `>= 0`, no `>= 1`) — ahora exige mínimo 1 (el propio usuario cuenta) y máximo 20 (tope que ya exigía la API mediante un chequeo aparte en el serializer; ahora queda parejo en modelo/formulario/API en vez de duplicado en un solo lado).
+- `ciudad`: nuevo validador de formato — solo letras (con tildes/ñ), espacios, apóstrofes y guiones, para permitir nombres compuestos ("Villa El Salvador", "San Martín de Porres") pero rechazar números y símbolos sueltos.
+- Migración confirmada como no-op con `sqlmigrate`.
+
+---
+
+## Despliegue (puntos 16 a 22)
+
+Todo lo de esta tanda ya está en `origin/main` y desplegado en Render vía auto-deploy:
+
+| Commit | Contenido |
+|---|---|
+| `abcbcaf`, `f3cd9da` | Punto 16 — Evolución de Ahorro |
+| `b9141f5` | Puntos 17, 18, 19 — validaciones de nickname/edad/email/teléfono, renombre de categorías, fecha límite de metas |
+| `57d5e71` | Punto 20 + primera pasada del punto 21 |
+| `b9be77e` | Causa raíz y arreglo real del punto 21 (bug de flexbox) |
+| `835e6f2` | Punto 22 — miembros del hogar y ciudad |
+
+---
+
+## 23. Reentrenamiento del modelo (correcciones de revisores del paper)
+
+**Rama:** `reentrenamiento-validacion` (al fusionar a `main`, Render despliega el modelo nuevo).
+
+Estructura de datos que se mantiene: 80 % entrenamiento, 20 % validación, y prueba con los usuarios reales del sistema (`ValidacionPrimerUso`).
+
+- **`src/train.py`**: Optuna (TPE, 40 trials, CV 3-fold, macro-F1), la CV de 5 particiones y el early stopping se hacen **solo dentro del 80 %** de entrenamiento. El early stopping usa un 10 % interno (estratificado) del 80 % para fijar el número de árboles, y luego el modelo se reajusta sobre todo el 80 % con ese número. El 20 % de validación ya no interviene en ninguna decisión del entrenamiento: solo mide el desempeño final. Antes el 20 % se usaba para el early stopping y Optuna usaba todas las filas. En `metrics.json`, la CV pasa a llamarse `cv_5fold_train` (se mantienen `valid` y `n_valid`).
+- **`src/preprocessing.py`**: se quitó `ESTRATO_SOC` (18 variables en vez de 19) porque la app no lo captura y en producción llegaba siempre como 0. `build_feature_row` ahora deriva `TIPO_INGRESO` de los ingresos (FORMAL = solo planilla, INFORMAL = solo informal, MIXTO = ambos); antes las tres `TIPO_*` llegaban en 0 en producción. Verificado: la regla coincide al 100 % con el `TIPO_INGRESO` real de las 9,527 filas de entrenamiento.
+- **`models/`**: nuevos `xgb_clf_model.pkl`, `scaler.pkl`, `shap_explainer.pkl`, `features.json`, `xgb_best_params.json`, `metrics.json`, más `ablation.json`, `stats_tests.json`, `analisis_validacion.json`, `planes_eval.json` y figuras en `models/figuras/` (matriz de confusión, ROC y SHAP sobre la validación).
+- **Análisis**: `src/stats_tests.py` compara LR, RF y XGBoost sobre la validación, con LR y RF ajustados con el mismo Optuna. `src/ablation.py` evalúa sobre la validación. Nuevos: `src/analisis_validacion.py` (matriz, ROC, SHAP, subgrupos, multi-semilla, sensibilidad a la limpieza) y `src/eval_planes.py` (evaluación de los planes de ajuste presupuestario).
+- **Panel admin**: `panel_admin/views.py` lee `cv_5fold_train` (con respaldo a `cv_5fold`); docstring de `ValidacionPrimerUso` actualizado.
+- **Nuevo comando `recalcular_validacion_ml`**: reclasifica con el modelo actual el primer análisis de cada usuario y muestra matriz de confusión y métricas con IC de Wilson; solo escribe en la BD con `--aplicar`. **No se ejecutó**: por decisión del equipo, los casos de validación ya registrados se conservan tal como se calcularon, y el modelo nuevo aplica solo a los análisis que se hagan desde ahora.
+
+**Verificación (sin reentrenar):** con el dataset limpio y los artefactos guardados, la partición de validación (semilla 42, 1,906 registros) reproduce exactamente `metrics.json`: accuracy 0.8137, precision 0.8089, recall 0.8063, F1 0.8076, AUC-ROC 0.9006, 288 árboles. `build_feature_row` devuelve exactamente las 18 columnas de `features.json`; `classify` y `recommend` funcionan (3 planes + SHAP). `manage.py check` sin problemas.
+
+---
+
+## Resumen de archivos tocados (puntos 1 a 15)
 
 ```
 financiero/forms.py                              (Tareas 5, 10)
@@ -248,4 +363,36 @@ src/ablation.py                                   (sección 14)
 P20261039_Historias de Usuarios..._ACTUALIZADO.xlsx    (sección 15)
 P20261039_Casos_de_Prueba_ACTUALIZADO_v2.xlsx          (sección 15)
 P20261039_Product Backlog v.1.2.xlsx                   (sección 15)
+```
+
+## Resumen de archivos tocados (puntos 16 a 22)
+
+```
+accounts/validators.py                            (nuevo — puntos 17, 22)
+accounts/models.py                                (puntos 17, 22)
+accounts/forms.py                                 (punto 17)
+accounts/migrations/0003_alter_usuario_edad_alter_usuario_email_and_more.py  (nueva — punto 17)
+accounts/migrations/0004_alter_usuario_ciudad_alter_usuario_miembros_hogar.py (nueva — punto 22)
+api/v1/serializers/accounts.py                    (punto 17)
+api/v1/serializers/recomendaciones.py             (punto 19)
+api/v1/views/financiero.py                        (punto 18)
+financiero/models.py                              (punto 18)
+financiero/views.py                               (punto 18)
+financiero/forms.py                               (punto 18)
+gamificacion/views.py                             (punto 18)
+recomendaciones/forms.py                          (punto 19)
+src/predict.py                                    (punto 18)
+panel_admin/views.py                              (punto 16)
+panel_admin/urls.py                               (punto 16)
+templates/panel_admin/evolucion_ahorro.html       (nueva — punto 16)
+static/js/sigamos.js                              (puntos 20, 21)
+static/css/sigamos.css                            (punto 21)
+templates/base.html                               (punto 21 — versión de CSS/JS)
+templates/base_auth.html                          (punto 21 — versión de CSS/JS)
+templates/gamificacion/logros.html                (punto 21)
+templates/gamificacion/progreso.html              (punto 21)
+templates/financiero/analisis.html                (punto 21)
+templates/recomendaciones/ml_insights.html        (punto 21)
+templates/recomendaciones/_resultado_ml.html      (punto 21)
+templates/recomendaciones/_resultado_ml_js.html   (punto 21)
 ```

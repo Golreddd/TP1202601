@@ -207,7 +207,8 @@ def validacion_ml(request):
 
     resumen   = _resumen_validacion(ValidacionPrimerUso.objects.all())
     publicado = _metricas_publicadas() or {}
-    valid, cv = publicado.get('valid', {}), publicado.get('cv_5fold', {})
+    valid = publicado.get('valid', {})
+    cv = publicado.get('cv_5fold_train', publicado.get('cv_5fold', {}))
     comparativa = [
         {'metrica': etiqueta, 'real': resumen[clave],
          'valid': _pct(valid.get(clave)), 'cv': _pct(cv.get(clave))}

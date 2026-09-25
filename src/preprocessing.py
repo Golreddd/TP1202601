@@ -13,8 +13,8 @@ se EXCLUYEN del modelo todas las variables que la reconstruyen:
   - GASTO_OTROS_BIENES + gastos discrecionales (vestido, comunicaciones): son la
     palanca de la recomendación; además completarían la identidad.
   - EDAD (sin señal en población 18-30).
-Se MANTIENEN: demografía (educación, miembros, estrato, tipo de ingreso) + ingresos
-+ gastos COMPROMETIDOS solo como ratio. Resultado: 19 features referenciales honestas.
+Se MANTIENEN: demografía (educación, miembros, tipo de ingreso) + ingresos
++ gastos COMPROMETIDOS solo como ratio. Resultado: 18 features referenciales honestas (ESTRATO_SOC excluido: la app no lo captura).
 """
 
 import numpy as np
@@ -77,13 +77,13 @@ def add_features(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def referential_features(df: pd.DataFrame) -> list:
-    """Las 19 features honestas presentes en df (sin variables de resta ni discrecionales)."""
+    """Las 18 features honestas presentes en df (sin variables de resta ni discrecionales)."""
     feats = ["NIVEL_EDUC", "MIEMBROS_HOGAR", "DEPENDE_INFORMAL",
              "ING_PLANILLA", "ING_INFORMAL", "LOG_ING", "ING_PER_CAPITA", "INFORMAL_SHARE",
              "PRESION_FINANCIERA", "COMMIT_PER_CAPITA"]
     feats += [c + "_R" for c in COMMITTED]
-    if "ESTRATO_SOC" in df.columns:
-        feats.append("ESTRATO_SOC")
+    # ESTRATO_SOC no se usa: la aplicación no lo captura del usuario, y un valor
+    # rellenado en inferencia quedaría fuera del rango observado en ENAHO (1-8).
     feats += [c for c in df.columns if c.startswith("TIPO_")]
     return [f for f in feats if f in df.columns]
 
@@ -109,6 +109,15 @@ def ahorro_identidad(user: dict) -> float:
     return ing_total(user) - gasto_total(user)
 
 
+def tipo_ingreso(user: dict) -> str:
+    """FORMAL (solo planilla), INFORMAL (solo informal) o MIXTO (ambos)."""
+    p = float(user.get("ING_PLANILLA", 0)) > 0
+    i = float(user.get("ING_INFORMAL", 0)) > 0
+    if p and i:
+        return "MIXTO"
+    return "FORMAL" if p else "INFORMAL"
+
+
 def build_feature_row(user: dict, features: list) -> pd.DataFrame:
     """
     Construye un DataFrame de 1 fila con EXACTAMENTE las columnas `features` (el orden
@@ -117,6 +126,13 @@ def build_feature_row(user: dict, features: list) -> pd.DataFrame:
     """
     row = dict(user)
     row.setdefault("TARGET_AHORRO", 0.0)
+    # TIPO_INGRESO se deriva de forma exacta de los ingresos, igual que en ENAHO:
+    # FORMAL = solo planilla, INFORMAL = solo informal, MIXTO = ambos.
+    if "TIPO_INGRESO" not in row:
+        row["TIPO_INGRESO"] = tipo_ingreso(row)
+    tipo = row.pop("TIPO_INGRESO")
+    for t in ("FORMAL", "INFORMAL", "MIXTO"):
+        row[f"TIPO_{t}"] = int(tipo == t)
     df = add_features(pd.DataFrame([row]))
     for f in features:
         if f not in df.columns:

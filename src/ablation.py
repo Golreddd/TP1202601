@@ -4,23 +4,23 @@ Estudio de ablacion por bloques de variables y contraste con variables de fuga
 (observacion 3). Genera la Tabla IV del paper.
 
 Todas las configuraciones usan el DATASET LIMPIO (9,527 registros), la misma
-particion estratificada 80/20 (train/valid) con semilla 42 de train.py y los
+particion estratificada 80/20 (entrenamiento/validacion) con semilla 42 de train.py y los
 hiperparametros de models/xgb_best_params.json. Solo cambia el subconjunto de
 columnas.
 
 Bloques (incrementales, cada uno anade variables al anterior):
-    M1  Solo demograficas                        ( 3 features)
-    M2  + tipo de ingreso                        ( 7 features)
-    M3  + ratios financieros                     (14 features)
-    M4  Todas las variables finales              (19 features = features.json)
+    M1  Solo demograficas                        ( 2 features)
+    M2  + tipo de ingreso                        ( 6 features)
+    M3  + ratios financieros                     (13 features)
+    M4  Todas las variables finales              (18 features = features.json)
 
 M4 no se reentrena: carga el modelo de produccion (models/xgb_clf_model.pkl), de
 modo que sus metricas coinciden exactamente con metrics.json y con el paper.
-    Contraste con variables de fuga      (30 features: incluye ING_TOTAL,
+    Contraste con variables de fuga      (29 features: incluye ING_TOTAL,
         CAPACIDAD_BRUTA, GASTO_TOTAL y los ocho montos crudos de gasto)
 
 M4 debe reproducir metrics.json. El contraste debe dispararse por encima de 0.98:
-esa distancia es la evidencia de que las 19 features no reconstruyen la identidad
+esa distancia es la evidencia de que las 18 features no reconstruyen la identidad
 contable ingreso - gasto.
 
 Uso (desde la raiz del repo):
@@ -43,11 +43,11 @@ from sklearn.preprocessing import StandardScaler
 
 from .preprocessing import (GASTO_COLS, add_features, binary_target,
                             clean_dataset, referential_features)
-from .train import _DATASET, _MODELS, _ROOT, _clf, _split
+from .train import _DATASET, _MODELS, _ROOT, _split, fit_final
 
 _CLEAN_DEFAULT = _ROOT / "dataset_final_limpio.csv"
 
-DEMOGRAFICAS = ["NIVEL_EDUC", "MIEMBROS_HOGAR", "ESTRATO_SOC"]
+DEMOGRAFICAS = ["NIVEL_EDUC", "MIEMBROS_HOGAR"]
 TIPO_INGRESO = ["TIPO_FORMAL", "TIPO_INFORMAL", "TIPO_MIXTO", "DEPENDE_INFORMAL"]
 RATIOS = ["PRESION_FINANCIERA", "COMMIT_PER_CAPITA", "GASTO_ALIMENTOS_R",
           "GASTO_VIVIENDA_SERVICIOS_R", "GASTO_TRANSPORTE_R", "GASTO_SALUD_R",
@@ -80,10 +80,10 @@ def _evaluar(df, feats, y, tr, va, hp, produccion=False) -> dict:
         m = joblib.load(_MODELS / "xgb_clf_model.pkl")
         Xs = sc.transform(X)
     else:
-        sc = StandardScaler().fit(X[tr])
-        Xs = sc.transform(X)
-        m = _clf(early_stopping=True, **hp)
-        m.fit(Xs[tr], y[tr], eval_set=[(Xs[va], y[va])], verbose=False)
+        # mismo protocolo que produccion: early stopping en el 10 % interno del 80 %
+        Xdf = pd.DataFrame(X)
+        m, sc, _ = fit_final(Xdf, y, tr, hp)
+        Xs = sc.transform(Xdf)
     pred = m.predict(Xs[va])
     prob = m.predict_proba(Xs[va])[:, 1]
     return {
@@ -110,9 +110,8 @@ def main(dataset=None, iqr_factor=2.5):
     with open(_MODELS / "xgb_best_params.json", encoding="utf-8") as f:
         best = json.load(f)
     hp = {k: v for k, v in best.items()
-          if k not in ("objective", "early_stopping_rounds",
+          if k not in ("objective", "early_stopping_rounds", "early_stopping_sobre",
                        "n_estimators_max", "n_arboles_usados")}
-    hp["n_estimators"] = best.get("n_estimators_max", 1500)
 
     bloques = {
         "M1 Solo demograficas": (DEMOGRAFICAS, False),
@@ -123,7 +122,7 @@ def main(dataset=None, iqr_factor=2.5):
     }
     esperado = set(DEMOGRAFICAS + TIPO_INGRESO + RATIOS + MONTOS_INGRESO)
     assert esperado == set(finales), \
-        f"Los bloques no suman las 19 features finales: {esperado ^ set(finales)}"
+        f"Los bloques no suman las 18 features finales: {esperado ^ set(finales)}"
 
     print(f"\nConjunto de validacion: n = {len(va)}\n")
     print(f"{'Bloque de variables':36s} {'k':>3} {'Acc':>6} {'Prec':>6} "

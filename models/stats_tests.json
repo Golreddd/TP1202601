@@ -1,0 +1,154 @@
+{
+  "n_valid": 1906,
+  "n_boot": 2000,
+  "seed": 42,
+  "baseline_clase_mayoritaria": 0.5152151101783841,
+  "hiperparametros": {
+    "Logistic Regression": {
+      "C": 26.87666222935415,
+      "penalty": "l1",
+      "cv_macro_f1": 0.8204641880308391
+    },
+    "Random Forest": {
+      "n_estimators": 200,
+      "max_depth": 12,
+      "min_samples_leaf": 2,
+      "max_features": "log2",
+      "cv_macro_f1": 0.8251219439483012
+    }
+  },
+  "metricas": {
+    "Logistic Regression": {
+      "accuracy": {
+        "valor": 0.8100734522560336,
+        "ci_low": 0.7922350472193075,
+        "ci_high": 0.8273871983210913
+      },
+      "precision": {
+        "valor": 0.7939330543933054,
+        "ci_low": 0.767947253870048,
+        "ci_high": 0.8180862523528138
+      },
+      "recall": {
+        "valor": 0.8214285714285714,
+        "ci_low": 0.7960730727565439,
+        "ci_high": 0.845040989606207
+      },
+      "f1": {
+        "valor": 0.8074468085106383,
+        "ci_low": 0.7873925438596491,
+        "ci_high": 0.826474524515959
+      },
+      "roc_auc": {
+        "valor": 0.8981339434496256,
+        "ci_low": 0.8841718175393442,
+        "ci_high": 0.911468734092979
+      },
+      "mcc": {
+        "valor": 0.6205331435097723
+      }
+    },
+    "Random Forest": {
+      "accuracy": {
+        "valor": 0.8116474291710388,
+        "ci_low": 0.7943336831059811,
+        "ci_high": 0.829485834207765
+      },
+      "precision": {
+        "valor": 0.8014941302027748,
+        "ci_low": 0.7759178218290202,
+        "ci_high": 0.8263170587239804
+      },
+      "recall": {
+        "valor": 0.8127705627705628,
+        "ci_low": 0.788804162450902,
+        "ci_high": 0.8378095334862252
+      },
+      "f1": {
+        "valor": 0.8070929607737776,
+        "ci_low": 0.7867768595041322,
+        "ci_high": 0.8268245782974323
+      },
+      "roc_auc": {
+        "valor": 0.9002235035839923,
+        "ci_low": 0.8866323697278818,
+        "ci_high": 0.9132790037365612
+      },
+      "mcc": {
+        "valor": 0.623160343949755
+      }
+    },
+    "XGBoost": {
+      "accuracy": {
+        "valor": 0.8137460650577125,
+        "ci_low": 0.7959076600209863,
+        "ci_high": 0.832109129066107
+      },
+      "precision": {
+        "valor": 0.8089033659066233,
+        "ci_low": 0.7832549576197808,
+        "ci_high": 0.8338798715937168
+      },
+      "recall": {
+        "valor": 0.8062770562770563,
+        "ci_low": 0.7805636702533254,
+        "ci_high": 0.8319608987868087
+      },
+      "f1": {
+        "valor": 0.8075880758807588,
+        "ci_low": 0.7881120683834828,
+        "ci_high": 0.8272911466094265
+      },
+      "roc_auc": {
+        "valor": 0.90064119519313,
+        "ci_low": 0.8869806123073104,
+        "ci_high": 0.9136579577790745
+      },
+      "mcc": {
+        "valor": 0.6271142291170017
+      }
+    }
+  },
+  "delong": {
+    "XGBoost vs Logistic Regression": {
+      "auc_a": 0.90064119519313,
+      "auc_b": 0.8981339434496257,
+      "diferencia": 0.002507251743504302,
+      "p_value": 0.2523867051950155
+    },
+    "XGBoost vs Random Forest": {
+      "auc_a": 0.90064119519313,
+      "auc_b": 0.9002235035839924,
+      "diferencia": 0.00041769160913762704,
+      "p_value": 0.799933523923565
+    }
+  },
+  "mcnemar": {
+    "XGBoost vs Logistic Regression": {
+      "solo_a_acierta": 58,
+      "solo_b_acierta": 51,
+      "p_value": 0.5654970679882663,
+      "metodo": "chi2 con correccion"
+    },
+    "XGBoost vs Random Forest": {
+      "solo_a_acierta": 42,
+      "solo_b_acierta": 38,
+      "p_value": 0.737315677216418,
+      "metodo": "chi2 con correccion"
+    }
+  },
+  "bootstrap_f1": {
+    "XGBoost vs Logistic Regression": {
+      "diferencia": 0.00014126737012043478,
+      "ci_low": -0.011191582968029353,
+      "ci_high": 0.011690494637332795,
+      "p_value": 0.999
+    },
+    "XGBoost vs Random Forest": {
+      "diferencia": 0.0004951151069811921,
+      "ci_low": -0.009209613667361399,
+      "ci_high": 0.010540843344133412,
+      "p_value": 0.91
+    }
+  }
+}

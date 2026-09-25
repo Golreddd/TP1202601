@@ -1,0 +1,34 @@
+{
+  "n_usuarios_deficit_valid": 982,
+  "n_planes": 1558,
+  "planes_que_cambian_clase": 0,
+  "feasibility_pct": 71.4,
+  "diversity_L1_soles": 15.75,
+  "tiempo_ms_medio": 42.1,
+  "delta_prob_media": 0.002,
+  "delta_prob_max": 0.114,
+  "delta_prob_min": -0.001,
+  "por_plan": {
+    "Suave": {
+      "n": 981,
+      "validez_pct": 65.2,
+      "cambia_clase_pct": 0.0,
+      "proximity_media": 0.329,
+      "sparsity_media": 2.8
+    },
+    "Equilibrado": {
+      "n": 301,
+      "validez_pct": 16.9,
+      "cambia_clase_pct": 0.0,
+      "proximity_media": 0.513,
+      "sparsity_media": 4.69
+    },
+    "Decidido": {
+      "n": 276,
+      "validez_pct": 5.1,
+      "cambia_clase_pct": 0.0,
+      "proximity_media": 0.539,
+      "sparsity_media": 5.76
+    }
+  }
+}
