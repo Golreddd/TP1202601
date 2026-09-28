@@ -1,3 +1,6 @@
+"""
+Modelo RegistroMensual: registro financiero mensual (ingresos, gastos y ahorro) de un usuario.
+"""
 from django.conf import settings
 from django.core.validators import MinValueValidator
 from django.db import models
@@ -13,7 +16,7 @@ _NO_NEGATIVO = [MinValueValidator(0, message='El monto no puede ser negativo.')]
 class RegistroMensual(models.Model):
     """
     Registro financiero mensual de un usuario.
-    Contiene los 13 campos de entrada de src/predict.py:
+    Contiene los 13 campos de entrada de src/pipeline/predict.py:
       - Perfil (3): EDAD, NIVEL_EDUC, MIEMBROS_HOGAR  → vienen de usuario directamente
       - Ingresos (2): ING_PLANILLA, ING_INFORMAL
       - Gastos (8):   GASTO_ALIMENTOS … GASTO_OTROS_BIENES
@@ -128,7 +131,7 @@ class RegistroMensual(models.Model):
 
     def to_user_dict(self):
         """
-        Construye el user_dict que espera recommend() en src/predict.py.
+        Construye el user_dict que espera recommend() en src/pipeline/predict.py.
         Los campos de perfil (EDAD, NIVEL_EDUC, MIEMBROS_HOGAR) vienen
         directamente del objeto usuario — ya no hace falta un JOIN a PerfilFinanciero.
         """

@@ -1,3 +1,6 @@
+"""
+Configuración de la app Django `recomendaciones`.
+"""
 from django.apps import AppConfig
 
 

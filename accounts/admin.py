@@ -1,3 +1,6 @@
+"""
+Registro de Rol y Usuario en el admin interno de Django.
+"""
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 

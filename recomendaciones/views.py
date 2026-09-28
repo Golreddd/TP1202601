@@ -1,3 +1,7 @@
+"""
+Vistas de recomendaciones: ejecución/consulta de análisis ML (ml_insights,
+historial_detalle) y CRUD de metas de largo plazo.
+"""
 import json
 
 from django.contrib import messages
@@ -64,8 +68,8 @@ def ml_insights(request):
     # Registros disponibles para elegir con cuál ejecutar el análisis.
     # Se serializan con json.dumps para evitar el problema de formato de
     # decimales por el locale es-PE al inyectarlos en JS.
-    from recomendaciones.trends import es_mes_atipico
-    from src.predict import classify, objetivo_suave_deficitario
+    from recomendaciones.analitica import es_mes_atipico
+    from src.pipeline.predict import classify, objetivo_suave_deficitario
 
     def _perfil_y_meta_suave(r):
         """Perfil (0=deficitario) y meta suave por registro, para que el menú de metas
@@ -111,7 +115,7 @@ def ml_insights(request):
     page_obj = paginator.get_page(request.GET.get('page'))
 
     # Análisis de tendencia multi-mes (para la tarjeta de contexto).
-    from recomendaciones.trends import analizar_tendencia, candidatos_meta
+    from recomendaciones.analitica import analizar_tendencia, candidatos_meta
     tendencia = analizar_tendencia(request.user)
 
     # El plan ya se recomputó CON historial: predict.py marcó cada recorte que ataca

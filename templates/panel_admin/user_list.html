@@ -8,6 +8,13 @@
     <div class="page-title">👥 Gestión de Usuarios</div>
     <div class="page-sub">Panel administrativo — Control de usuarios del sistema</div>
   </div>
+  <div>
+    <form method="post" action="{% url 'panel_admin:enviar_recordatorios' %}"
+          onsubmit="return confirm('¿Enviar el recordatorio a los usuarios activos que no registraron nada esta semana?')">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-primary btn-sm">📧 Enviar recordatorios</button>
+    </form>
+  </div>
 </div>
 
 <!-- Banner admin -->

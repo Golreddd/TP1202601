@@ -1,3 +1,6 @@
+"""
+Configuración de la app Django `gamificacion`.
+"""
 from django.apps import AppConfig
 
 

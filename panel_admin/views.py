@@ -1,3 +1,7 @@
+"""
+Vistas de panel_admin: gestión de usuarios, log de auditoría, métricas publicadas
+del modelo ML y validación externa (matriz de confusión, evolución del ahorro).
+"""
 import csv
 import json
 import logging
@@ -6,15 +10,18 @@ from pathlib import Path
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
+from django.core.mail import send_mail
 from django.core.paginator import Paginator
 from django.db import DatabaseError, transaction
 from django.db.models import Count, Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
 
 from accounts.models import Usuario
+from financiero.models import RegistroMensual
 from panel_admin.models import AuditLog, ValidacionPrimerUso
 
 logger = logging.getLogger(__name__)
@@ -102,6 +109,70 @@ def user_toggle_active(request, pk):
 
     estado = 'activado' if nuevo_estado else 'desactivado'
     messages.success(request, f'Usuario {usuario.nickname} {estado} correctamente.')
+    return destino
+
+
+def _enviar_recordatorio_email(usuario):
+    """Renderiza y envía el correo de recordatorio semanal a `usuario`.
+
+    `dias_racha` usa `dias_vigentes` (no `dias_consecutivos`) para no afirmar
+    una racha que ya caducó: si el último registro fue hace más de un día,
+    la racha ya está en 0 aunque `dias_consecutivos` conserve el último valor.
+    """
+    racha = getattr(usuario, 'racha', None)
+    dias_racha = racha.dias_vigentes if racha else 0
+    contexto = {
+        'nickname': usuario.nickname,
+        'dias_racha': dias_racha,
+        'link_registro': settings.SITE_URL + reverse('financiero:registro_create'),
+    }
+    asunto = render_to_string('accounts/recordatorio_semanal_subject.txt', contexto)
+    asunto = ' '.join(asunto.splitlines()).strip()
+    cuerpo_html = render_to_string('accounts/recordatorio_semanal_email.html', contexto)
+    send_mail(
+        subject=asunto,
+        message=f'Esta semana no has registrado tus ingresos/gastos en SmartSave. '
+                f'Entra a {contexto["link_registro"]} para ponerte al día.',
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        recipient_list=[usuario.email],
+        html_message=cuerpo_html,
+        fail_silently=True,
+    )
+
+
+@staff_member_required
+def enviar_recordatorios(request):
+    """POST /panel-admin/recordatorios/enviar/ — envía el recordatorio semanal a
+    los usuarios activos que activaron la opción en su perfil y no registraron
+    ningún RegistroMensual (creado o editado) en los últimos 7 días.
+    """
+    destino = redirect(reverse('panel_admin:user_list'))
+    if request.method != 'POST':
+        return destino
+
+    hace_7_dias = timezone.now() - timezone.timedelta(days=7)
+    candidatos = Usuario.objects.filter(is_active=True, recordatorio_semanal_activo=True)
+
+    enviados = 0
+    for usuario in candidatos:
+        tiene_actividad = RegistroMensual.objects.filter(
+            usuario=usuario, actualizado_en__gte=hace_7_dias,
+        ).exists()
+        if tiene_actividad:
+            continue
+        _enviar_recordatorio_email(usuario)
+        enviados += 1
+
+    AuditLog.registrar(
+        admin=request.user, accion='ENVIAR_RECORDATORIOS',
+        detalle=f'{enviados} recordatorio(s) enviado(s) de {candidatos.count()} usuario(s) con la opción activada.',
+        request=request,
+    )
+    if enviados:
+        messages.success(request, f'Se enviaron {enviados} recordatorio(s) por correo.')
+    else:
+        messages.info(request, 'No hay usuarios pendientes: todos los que activaron el '
+                                'recordatorio ya registraron algo esta semana.')
     return destino
 
 

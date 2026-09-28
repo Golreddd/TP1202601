@@ -1,3 +1,6 @@
+"""
+Formularios de accounts: registro, cambio de contraseña y edición de perfil.
+"""
 from django import forms
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
@@ -106,7 +109,7 @@ class PerfilForm(forms.ModelForm):
     """
     class Meta:
         model = Usuario
-        fields = ['nickname', 'email', 'telefono', 'ciudad']
+        fields = ['nickname', 'email', 'telefono', 'ciudad', 'recordatorio_semanal_activo']
         widgets = {
             'nickname': forms.TextInput(attrs={'class': 'form-input', 'maxlength': 20}),
             'email':    forms.EmailInput(attrs={'class': 'form-input'}),
@@ -115,6 +118,7 @@ class PerfilForm(forms.ModelForm):
                 'inputmode': 'numeric', 'pattern': '[0-9]{9}',
             }),
             'ciudad':   forms.TextInput(attrs={'class': 'form-input'}),
+            'recordatorio_semanal_activo': forms.CheckboxInput(),
         }
 
     def clean_email(self):

@@ -1,3 +1,6 @@
+"""
+Modelos de gamificacion: Racha, Logro y LogroUsuario.
+"""
 from django.db import models
 from django.conf import settings
 

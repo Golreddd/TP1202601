@@ -1,3 +1,6 @@
+"""
+Serializer DRF de RegistroMensual (registro financiero mensual del usuario).
+"""
 from datetime import date
 
 from rest_framework import serializers

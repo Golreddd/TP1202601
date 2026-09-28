@@ -1,3 +1,6 @@
+"""
+Formulario de alta/edición de MetaLargoPlazo.
+"""
 from datetime import date
 
 from django import forms

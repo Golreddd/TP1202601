@@ -14,7 +14,7 @@ Protocolo 80/20: el 20 % de VALIDACIÓN no interviene en ninguna decisión de en
   6. Evaluación ÚNICA sobre el 20 % de validación.
   7. SHAP TreeExplainer + persistencia de modelo, scaler, params y métricas.
 
-Uso:  python -m src.train
+Uso:  python -m src.pipeline.train
 """
 
 import json
@@ -41,9 +41,10 @@ optuna.logging.set_verbosity(optuna.logging.WARNING)
 RANDOM_STATE = 42
 N_TRIALS = 40
 INNER_ES_FRAC = 0.10          # fracción del 80 % reservada para early stopping
-_ROOT = Path(__file__).resolve().parent.parent
+_ROOT = Path(__file__).resolve().parent.parent.parent
 _MODELS = _ROOT / "models"
-_DATASET = _ROOT / "dataset2.csv"
+_INVESTIGACION = _MODELS / "investigacion"  # salidas de los scripts de src/research (solo tesis/paper)
+_DATASET = _ROOT / "data" / "dataset2.csv"
 
 
 def _clf(seed=RANDOM_STATE, early_stopping=False, **params) -> XGBClassifier:

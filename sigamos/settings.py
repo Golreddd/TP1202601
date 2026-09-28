@@ -35,7 +35,7 @@ from django.core.exceptions import ImproperlyConfigured
 # ──────────────────────────────────────────────────────────────────────────────
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Permite hacer: from src.predict import recommend  en cualquier vista
+# Permite hacer: from src.pipeline.predict import recommend  en cualquier vista
 sys.path.insert(0, str(BASE_DIR))
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -277,6 +277,11 @@ STORAGES = {
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
+
+# URL pública del sitio, para armar enlaces absolutos en correos enviados sin
+# request (ej. el recordatorio semanal desde el panel admin, que no tiene
+# get_current_site() disponible).
+SITE_URL = config('SITE_URL', default='http://localhost:8000')
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 

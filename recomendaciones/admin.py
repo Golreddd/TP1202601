@@ -1,3 +1,6 @@
+"""
+Registro de MetaMensual, MetaLargoPlazo y ResultadoML en el admin interno de Django.
+"""
 from django.contrib import admin
 from recomendaciones.models import MetaMensual, MetaLargoPlazo, ResultadoML
 

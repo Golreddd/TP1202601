@@ -1,3 +1,6 @@
+"""
+Configuración de la app Django `panel_admin`.
+"""
 from django.apps import AppConfig
 
 

@@ -1,3 +1,6 @@
+"""
+Registro de AuditLog en el admin interno de Django.
+"""
 from django.contrib import admin
 from panel_admin.models import AuditLog
 

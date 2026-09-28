@@ -35,6 +35,12 @@ Base: /api/v1/
 ║  CRUD   recomendaciones/metas-mensuales/  CON token          ║
 ║  CRUD   recomendaciones/metas/            CON token          ║
 ╠══════════════════════════════════════════════════════════════╣
+║  ASISTENTE DE VOZ                                            ║
+╠══════════════════════════════════════════════════════════════╣
+║  POST   voz/interpretar/               CON token             ║
+║  POST   voz/confirmar/                 CON token (guarda)    ║
+║  POST   voz/deshacer/                  CON token             ║
+╠══════════════════════════════════════════════════════════════╣
 ║  GAMIFICACIÓN                                                ║
 ╠══════════════════════════════════════════════════════════════╣
 ║  GET    gamificacion/racha/            CON token             ║
@@ -68,6 +74,7 @@ from api.v1.views.financiero import (
     RegistroMensualViewSet,
 )
 from api.v1.views.gamificacion import LogrosView, RachaView
+from api.v1.views.voz import ConfirmarVozView, DeshacerVozView, InterpretarVozView
 from api.v1.views.recomendaciones import (
     EjecutarMLView,
     ElegirPlanView,
@@ -164,6 +171,19 @@ urlpatterns = [
          ElegirPlanView.as_view(),
          name='api_elegir_plan'),
     # Las rutas de metas-mensuales y metas (largo plazo) vienen del router.
+
+    # ── ASISTENTE DE VOZ ──────────────────────────────────────────────────────
+    path('voz/interpretar/',
+         InterpretarVozView.as_view(),
+         name='api_voz_interpretar'),
+
+    path('voz/confirmar/',
+         ConfirmarVozView.as_view(),
+         name='api_voz_confirmar'),
+
+    path('voz/deshacer/',
+         DeshacerVozView.as_view(),
+         name='api_voz_deshacer'),
 
     # ── GAMIFICACIÓN ──────────────────────────────────────────────────────────
     path('gamificacion/racha/',

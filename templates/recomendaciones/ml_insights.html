@@ -120,7 +120,7 @@
 {% endif %}
 
 {% if ultimo and detalle %}
-{% include "recomendaciones/_resultado_ml.html" %}
+{% include "recomendaciones/partials/_resultado_ml.html" %}
 
 <!-- Historial -->
 {% if total_analisis > 1 %}
@@ -371,7 +371,7 @@ function elegirAlternativa(clave, monto) {
 
 document.addEventListener('DOMContentLoaded', poblarSelectorRegistros);
 
-{% include "recomendaciones/_resultado_ml_js.html" %}
+{% include "recomendaciones/partials/_resultado_ml_js.html" %}
 
 function ejecutarML() {
   const sel = document.getElementById('registroSel');

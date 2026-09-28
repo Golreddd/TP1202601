@@ -16,7 +16,7 @@
 </div>
 
 {% if detalle %}
-  {% include "recomendaciones/_resultado_ml.html" %}
+  {% include "recomendaciones/partials/_resultado_ml.html" %}
 {% else %}
 <div class="card">
   <div class="empty-state">
@@ -31,6 +31,6 @@
 
 {% block extra_js %}
 <script>
-{% include "recomendaciones/_resultado_ml_js.html" %}
+{% include "recomendaciones/partials/_resultado_ml_js.html" %}
 </script>
 {% endblock %}

@@ -27,8 +27,8 @@ from django.core.management.base import BaseCommand
 
 from financiero.models import RegistroMensual
 from panel_admin.models import ValidacionPrimerUso
-from src.predict import classify
-from src.preprocessing import gasto_total, ing_total
+from src.pipeline.predict import classify
+from src.pipeline.preprocessing import gasto_total, ing_total
 
 
 def _wilson(k, n, z=1.959964):

@@ -1,3 +1,6 @@
+"""
+Registro de Racha, Logro y LogroUsuario en el admin interno de Django.
+"""
 from django.contrib import admin
 from gamificacion.models import Racha, Logro, LogroUsuario
 

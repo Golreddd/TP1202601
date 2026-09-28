@@ -1,3 +1,6 @@
+"""
+Formulario de alta/edición de RegistroMensual.
+"""
 from datetime import date
 
 from django import forms

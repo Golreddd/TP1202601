@@ -1,3 +1,6 @@
+"""
+Serializers DRF de Rol y Usuario (lectura, registro y edición de perfil).
+"""
 from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
 

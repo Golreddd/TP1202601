@@ -1,3 +1,7 @@
+"""
+Modelos de recomendaciones: MetaMensual, MetaLargoPlazo, PlanSeleccionado y
+ResultadoML (orquesta la clasificación + SHAP + recomendación de src/pipeline/predict.py).
+"""
 import json
 import math
 from datetime import date
@@ -11,7 +15,7 @@ from django.db import models
 class MetaMensual(models.Model):
     """
     Meta de ahorro mensual del usuario.
-    El campo monto se pasa como meta_ahorro a recommend() en src/predict.py.
+    El campo monto se pasa como meta_ahorro a recommend() en src/pipeline/predict.py.
     """
     usuario = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -158,7 +162,7 @@ class MetaLargoPlazo(models.Model):
 
 class ResultadoML(models.Model):
     """
-    Resultados escalares de cada ejecución de recommend() en src/predict.py.
+    Resultados escalares de cada ejecución de recommend() en src/pipeline/predict.py.
 
     Modelo nuevo: XGBoost Classifier binario (Déficit/Ahorra). Ya NO hay
     K-Means ni montos predichos. Se guardan solo los escalares:
@@ -212,7 +216,7 @@ class ResultadoML(models.Model):
     # Escenario (tipo de meta) y categoría de gasto que priorizó el counterfactual en
     # ESTE análisis. Se consultan al generar el análisis del mes siguiente para no
     # repetir la misma categoría objetivo / tipo de meta dos meses seguidos si los
-    # datos permiten variar (ver recomendaciones.trends.contexto_anti_estatismo).
+    # datos permiten variar (ver recomendaciones.analitica.contexto_anti_estatismo).
     escenario           = models.CharField(max_length=40, blank=True, default='',
                                            verbose_name='Escenario del plan')
     categoria_objetivo  = models.CharField(max_length=40, blank=True, default='',
@@ -254,8 +258,8 @@ class ResultadoML(models.Model):
         etc.). Filas anteriores a esta migración (sin escenario guardado) usan el
         comportamiento previo como fallback.
         """
-        from src.predict import classify, recommend, shap_explain
-        from recomendaciones.trends import contexto_anti_estatismo, historial_user_dicts
+        from src.pipeline.predict import classify, recommend, shap_explain
+        from recomendaciones.analitica import contexto_anti_estatismo, historial_user_dicts
         # historial multi-mes -> el counterfactual prioriza el gasto que más creció.
         historial = historial_user_dicts(self.usuario)
         anti_estatismo = contexto_anti_estatismo(self.usuario, antes_de=self.creado_en)
@@ -288,7 +292,7 @@ class ResultadoML(models.Model):
         return plan
 
     # Escenarios donde el objetivo es 100% determinista (sin elección del usuario) —
-    # ver _ESCENARIOS_DETERMINISTAS en src/predict.py, misma lista.
+    # ver _ESCENARIOS_DETERMINISTAS en src/pipeline/predict.py, misma lista.
     _ESCENARIOS_DETERMINISTAS = {
         'deficit', 'deficit_bajo', 'deficit_leve_override', 'deficit_significativo_override',
     }

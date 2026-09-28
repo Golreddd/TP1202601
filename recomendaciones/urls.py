@@ -1,3 +1,6 @@
+"""
+URLs de recomendaciones: análisis ML (insights, historial) y CRUD de metas.
+"""
 from django.urls import path
 from recomendaciones import views
 

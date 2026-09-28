@@ -1,0 +1,12 @@
+{% comment %}
+Modal del asistente de voz — el contenido interno (#voz-contenido) lo arma
+static/js/voz.js según el estado (escuchando, confirmar, éxito, respuesta,
+falta un dato, no entendido, sin soporte de voz). Aquí solo va el cascarón,
+igual al patrón .modal-overlay > .modal que ya usa el resto del sistema.
+{% endcomment %}
+<div class="modal-overlay" id="modal-voz">
+  <div class="modal modal-voz">
+    <div class="modal-title">🎤 Habla con SmartSave</div>
+    <div id="voz-contenido"></div>
+  </div>
+</div>

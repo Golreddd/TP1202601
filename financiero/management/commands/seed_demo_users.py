@@ -336,8 +336,8 @@ class Command(BaseCommand):
         from accounts.models import Rol, Usuario
         from financiero.models import RegistroMensual
         from recomendaciones.models import MetaMensual, PlanSeleccionado, ResultadoML
-        from src.predict import classify, recommend, shap_explain
-        from recomendaciones.trends import historial_user_dicts
+        from src.pipeline.predict import classify, recommend, shap_explain
+        from recomendaciones.analitica import historial_user_dicts
 
         rol_usuario, _ = Rol.objects.get_or_create(
             nombre=Rol.USUARIO,

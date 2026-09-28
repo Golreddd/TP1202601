@@ -1,3 +1,6 @@
+"""
+Serializers DRF de metas (mensual y largo plazo) y de ResultadoML.
+"""
 from rest_framework import serializers
 
 from recomendaciones.models import MetaLargoPlazo, MetaMensual, ResultadoML

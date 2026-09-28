@@ -1,3 +1,6 @@
+"""
+URLs de gamificacion: catálogo de logros y progreso del usuario.
+"""
 from django.urls import path
 from gamificacion import views
 

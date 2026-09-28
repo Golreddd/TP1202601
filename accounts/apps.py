@@ -1,3 +1,6 @@
+"""
+Configuración de la app Django `accounts` (registra las señales al arrancar).
+"""
 from django.apps import AppConfig
 
 

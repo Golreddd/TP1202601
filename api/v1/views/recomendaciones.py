@@ -64,7 +64,7 @@ def inconsistencia_datos_financieros(registro):
 
 def _llamar_recommend(user_dict: dict, meta_ahorro: float):
     """Importa y llama a recommend() manejando errores de forma consistente."""
-    from src.predict import recommend
+    from src.pipeline.predict import recommend
     return recommend(user_dict, meta_ahorro)
 
 
@@ -80,7 +80,7 @@ def _orquestar(ref_dict: dict, actual_dict: dict, meta_ahorro: float, historial=
     sustituidos por los del mes de referencia. Si ref_dict es actual_dict, el
     resultado es equivalente a recommend() directo (caso de un solo mes).
     """
-    from src.predict import classify, recommend, shap_explain
+    from src.pipeline.predict import classify, recommend, shap_explain
     plan = recommend(actual_dict, meta_ahorro, historial=historial, alternativa=alternativa,
                      candidatos_meta=candidatos_meta, anti_estatismo=anti_estatismo)
     plan['clase_actual'] = classify(ref_dict)
@@ -166,9 +166,9 @@ class EjecutarMLView(APIView):
         # 3. Pipeline ML sobre el MES ELEGIDO: clasificación + SHAP y plan de recortes,
         #    todo del mismo mes. El historial multi-mes prioriza QUÉ categoría recortar
         #    primero (§5) y alimenta el menú de metas + anti-estatismo (§3, §4).
-        from recomendaciones.trends import (candidatos_meta, contexto_anti_estatismo,
-                                            analizar_tendencia, es_mes_atipico,
-                                            historial_user_dicts)
+        from recomendaciones.analitica import (candidatos_meta, contexto_anti_estatismo,
+                                               analizar_tendencia, es_mes_atipico,
+                                               historial_user_dicts)
         historial = historial_user_dicts(user)
         tendencia = analizar_tendencia(user)
         try:
@@ -317,9 +317,9 @@ class PronosticoMLView(APIView):
         # Llamar al pipeline ML (usa el historial REAL del usuario para que la
         # priorización de categorías y el escalamiento simulen de forma realista,
         # aunque los montos del mes sean hipotéticos)
-        from recomendaciones.trends import historial_user_dicts
+        from recomendaciones.analitica import historial_user_dicts
         try:
-            from src.predict import recommend
+            from src.pipeline.predict import recommend
             resultado_raw = recommend(user_dict, meta_ahorro, historial=historial_user_dicts(user))
         except FileNotFoundError as exc:
             return Response(

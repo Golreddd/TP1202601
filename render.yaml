@@ -21,6 +21,12 @@ services:
       - key: ALLOWED_HOSTS
         value: ".onrender.com"
 
+      # URL pública real del servicio. Se usa para armar enlaces absolutos en
+      # correos enviados sin request (ej. el recordatorio semanal desde el
+      # panel admin). Si el servicio cambia de URL en Render, actualizar aquí.
+      - key: SITE_URL
+        value: "https://tp1202601-u7fk.onrender.com"
+
       # ── Secretos ──────────────────────────────────────────────────────────
       # `sync: false` = el valor NO viaja en este archivo (que sí se versiona en
       # GitHub); se carga a mano en Render → Environment. Nunca poner credenciales

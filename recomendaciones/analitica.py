@@ -1,13 +1,13 @@
 """
 Análisis de tendencia financiera multi-mes (capa Django — NO toca el modelo).
 
-Complementa el análisis de un solo mes de `src/predict.py` con la evolución del
+Complementa el análisis de un solo mes de `src/pipeline/predict.py` con la evolución del
 usuario a lo largo de su historial:
   - dirección del ahorro (positiva / negativa / estable),
   - categoría de gasto con mayor crecimiento (dónde enfocar los recortes),
   - meta de escalamiento sugerida (spec Modo 3: promedio últimos 3 meses × 1.25),
   - candidatos para el menú de metas (spec §4, Opción A) y contexto anti-estatismo
-    (spec §3) que src/predict.py no puede calcular por sí solo (dependen de BD).
+    (spec §3) que src/pipeline/predict.py no puede calcular por sí solo (dependen de BD).
 
 Implementa los "modos adaptativos" del spec sin modificar la lógica de inferencia:
 el modelo sigue operando sobre un solo mes; esto es una capa de contexto encima.
@@ -32,7 +32,7 @@ def es_mes_atipico(registro, n=6):
     """Spec §6: True si el gasto total del `registro` supera 2x el promedio histórico
     del usuario (excluyendo el propio registro). Requiere ≥2 OTROS meses para comparar;
     si no hay suficiente historial, no se puede calificar de "atípico" (False)."""
-    from src.predict import es_mes_atipico as _es_atipico
+    from src.pipeline.predict import es_mes_atipico as _es_atipico
     otros = list(
         RegistroMensual.objects.filter(usuario=registro.usuario)
         .exclude(pk=registro.pk).order_by('-periodo')[:n]
@@ -60,7 +60,7 @@ def contexto_anti_estatismo(usuario, antes_de=None):
 
 def candidatos_meta(usuario, tendencia=None):
     """Spec §4 (Opción A) y §5 (Modo 3): arma los candidatos numéricos para el menú de
-    metas de un usuario cuyo ahorro real del mes ya es ≥0 — src/predict.py NO puede
+    metas de un usuario cuyo ahorro real del mes ya es ≥0 — src/pipeline/predict.py NO puede
     calcularlos solo porque dependen de BD (historial + MetaLargoPlazo activa):
       - escalamiento: se reutiliza `tendencia['meta_escalamiento']` (única fuente de la
         fórmula Modo 3 — promedio últimos 3 meses × 1.25 — para no duplicarla; si no se
@@ -70,7 +70,7 @@ def candidatos_meta(usuario, tendencia=None):
         Si solo hubiera una meta con fecha límite, el resultado es igual que antes; con
         varias, el monto sugerido cubre el avance de todas a la vez (antes solo se
         tomaba la de fecha más próxima y las demás quedaban fuera del candidato).
-    `ideal_20` NO se incluye aquí: src/predict.py ya lo calcula internamente (20% del
+    `ideal_20` NO se incluye aquí: src/pipeline/predict.py ya lo calcula internamente (20% del
     ingreso del propio user_dict, sin depender de BD).
     """
     from recomendaciones.models import MetaLargoPlazo
@@ -143,9 +143,60 @@ def comparacion_plan(usuario, plan_activo):
     return out
 
 
+MAPA_LABEL_PLAN = {
+    'GASTO_ALIMENTOS': 'Alimentos', 'GASTO_VESTIDO': 'Ropa',
+    'GASTO_VIVIENDA_SERVICIOS': 'Vivienda/Serv.', 'GASTO_SALUD': 'Salud',
+    'GASTO_TRANSPORTE': 'Transporte', 'GASTO_COMUNICACIONES': 'Comunicaciones',
+    'GASTO_EDUCACION': 'Educación', 'GASTO_OTROS_BIENES': 'Otros Gastos',
+}
+MAPA_ICONO_PLAN = {
+    'GASTO_ALIMENTOS': '🍽️', 'GASTO_VESTIDO': '👕',
+    'GASTO_VIVIENDA_SERVICIOS': '🏠', 'GASTO_SALUD': '💊',
+    'GASTO_TRANSPORTE': '🚌', 'GASTO_COMUNICACIONES': '📶',
+    'GASTO_EDUCACION': '🎓', 'GASTO_OTROS_BIENES': '🛍️',
+}
+
+
+def presupuesto_por_categoria(plan_activo, registro):
+    """Monto sugerido por categoría (del plan elegido) vs. lo gastado en `registro`.
+
+    Única fuente de este cálculo — usada por gamificacion.views.progreso (tarjetas
+    de presupuesto) y por el asistente de voz (impacto de un gasto dictado sobre
+    el plan). Debe coincidir EXACTO con las claves de
+    RegistroMensual.gastos_por_categoria(): más abajo se hace
+    gastos_reales.get(label, 0.0), así que si estas etiquetas se desalinean, esa
+    categoría "pierde" silenciosamente su gasto real (siempre 0).
+
+    Devuelve [] si no hay plan activo o no hay registro que comparar.
+    """
+    if not plan_activo or not registro:
+        return []
+    gastos_reales = registro.gastos_por_categoria()
+    filas = []
+    for clave, sugerido in (plan_activo.gastos_sugeridos or {}).items():
+        label = MAPA_LABEL_PLAN.get(clave, clave)
+        sugerido = float(sugerido)
+        gastado = float(gastos_reales.get(label, 0.0))
+        pct = round(gastado / max(sugerido, 0.01) * 100, 1)
+        filas.append({
+            'clave_ml':   clave,
+            'categoria':  label,
+            'icono':      MAPA_ICONO_PLAN.get(clave, '💰'),
+            'sugerido':   round(sugerido, 2),
+            'gastado':    round(gastado, 2),
+            'disponible': round(max(sugerido - gastado, 0.0), 2),
+            'excedente':  round(max(gastado - sugerido, 0.0), 2),
+            'excedido':   gastado > sugerido,
+            'pct':        min(pct, 999),
+            'pct_barra':  min(pct, 100),
+        })
+    filas.sort(key=lambda c: c['pct'], reverse=True)
+    return filas
+
+
 def normalizar_categoria(nombre):
     """Clave canónica para comparar categorías entre la tendencia (labels de
-    gastos_por_categoria) y el plan (categorias de predict.py), que difieren
+    gastos_por_categoria) y el plan (categorias de pipeline/predict.py), que difieren
     en acentos y sufijos (ej. 'Educación' vs 'Educacion', 'Otros' vs 'Otros Bienes',
     'Vivienda/Serv.' vs 'Vivienda Servicios'). Quita acentos y toma la 1ra palabra."""
     s = unicodedata.normalize('NFKD', nombre or '').encode('ascii', 'ignore').decode()

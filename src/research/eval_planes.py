@@ -14,8 +14,8 @@ y en global: factibilidad (usuarios con al menos un plan valido), diversidad (L1
 en soles entre planes de un mismo usuario), tiempo medio y desplazamiento de la
 probabilidad predicha.
 
-Uso:   python -m src.eval_planes
-Salida: models/planes_eval.json
+Uso:   python -m src.research.eval_planes
+Salida: models/investigacion/planes_eval.json
 """
 import json
 import time
@@ -23,9 +23,9 @@ from itertools import combinations
 
 import numpy as np
 
-from .predict import recommend
-from .preprocessing import GASTO_COLS, binary_target, clean_dataset
-from .train import _DATASET, _MODELS, _split
+from ..pipeline.predict import recommend
+from ..pipeline.preprocessing import GASTO_COLS, binary_target, clean_dataset
+from ..pipeline.train import _DATASET, _INVESTIGACION, _split
 
 CAMPOS_APP = ["NIVEL_EDUC", "MIEMBROS_HOGAR", "ING_PLANILLA", "ING_INFORMAL"] + GASTO_COLS
 
@@ -76,7 +76,7 @@ def main() -> dict:
                          "sparsity_media": round(float(np.mean(v["spars"])), 2)}
                      for k, v in por_plan.items()},
     }
-    with open(_MODELS / "planes_eval.json", "w", encoding="utf-8") as f:
+    with open(_INVESTIGACION / "planes_eval.json", "w", encoding="utf-8") as f:
         json.dump(rep, f, ensure_ascii=False, indent=2)
     print(json.dumps(rep, ensure_ascii=False, indent=2))
     return rep

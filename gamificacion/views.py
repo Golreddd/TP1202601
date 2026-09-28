@@ -1,3 +1,7 @@
+"""
+Vistas de gamificacion: catálogo de logros y progreso (rachas, presupuesto por
+categoría y comparación mes a mes contra el plan de ahorro activo).
+"""
 import json
 
 from django.contrib.auth.decorators import login_required
@@ -47,7 +51,7 @@ def progreso(request):
     from financiero.models import RegistroMensual
     from gamificacion.models import Logro, LogroUsuario
     from recomendaciones.models import PlanSeleccionado
-    from recomendaciones.trends import comparacion_plan as calcular_comparacion_plan, mes_inicio_plan
+    from recomendaciones.analitica import comparacion_plan as calcular_comparacion_plan, mes_inicio_plan
 
     registros = list(
         RegistroMensual.objects.filter(usuario=request.user).order_by('-periodo')[:12]
@@ -68,7 +72,7 @@ def progreso(request):
         usuario=request.user, activo=True
     ).select_related('resultado__registro').first()
 
-    # Regla de "cumple/no cumple" un plan: única fuente en recomendaciones.trends,
+    # Regla de "cumple/no cumple" un plan: única fuente en recomendaciones.analitica,
     # reutilizada también por gamificacion.services para los logros de constancia.
     comparacion_plan = calcular_comparacion_plan(request.user, plan_activo)
 
@@ -87,39 +91,8 @@ def progreso(request):
             .order_by('-periodo').first()
         )
     if plan_activo and registro_actual_plan:
-        # Debe coincidir EXACTO con las claves de RegistroMensual.gastos_por_categoria():
-        # más abajo se hace gastos_reales.get(label, 0.0), así que si estas etiquetas se
-        # desalinean, esa categoría "pierde" silenciosamente su gasto real (siempre 0).
-        MAPA_LABEL = {
-            'GASTO_ALIMENTOS': 'Alimentos', 'GASTO_VESTIDO': 'Ropa',
-            'GASTO_VIVIENDA_SERVICIOS': 'Vivienda/Serv.', 'GASTO_SALUD': 'Salud',
-            'GASTO_TRANSPORTE': 'Transporte', 'GASTO_COMUNICACIONES': 'Comunicaciones',
-            'GASTO_EDUCACION': 'Educación', 'GASTO_OTROS_BIENES': 'Otros Gastos',
-        }
-        MAPA_ICONO = {
-            'GASTO_ALIMENTOS': '🍽️', 'GASTO_VESTIDO': '👕',
-            'GASTO_VIVIENDA_SERVICIOS': '🏠', 'GASTO_SALUD': '💊',
-            'GASTO_TRANSPORTE': '🚌', 'GASTO_COMUNICACIONES': '📶',
-            'GASTO_EDUCACION': '🎓', 'GASTO_OTROS_BIENES': '🛍️',
-        }
-        gastos_reales = registro_actual_plan.gastos_por_categoria()
-        for clave, sugerido in (plan_activo.gastos_sugeridos or {}).items():
-            label = MAPA_LABEL.get(clave, clave)
-            sugerido = float(sugerido)
-            gastado = float(gastos_reales.get(label, 0.0))
-            pct = round(gastado / max(sugerido, 0.01) * 100, 1)
-            presupuesto_categorias.append({
-                'categoria':  label,
-                'icono':      MAPA_ICONO.get(clave, '💰'),
-                'sugerido':   round(sugerido, 2),
-                'gastado':    round(gastado, 2),
-                'disponible': round(max(sugerido - gastado, 0.0), 2),
-                'excedente':  round(max(gastado - sugerido, 0.0), 2),
-                'excedido':   gastado > sugerido,
-                'pct':        min(pct, 999),
-                'pct_barra':  min(pct, 100),
-            })
-        presupuesto_categorias.sort(key=lambda c: c['pct'], reverse=True)
+        from recomendaciones.analitica import presupuesto_por_categoria
+        presupuesto_categorias = presupuesto_por_categoria(plan_activo, registro_actual_plan)
 
     # ── Alerta de presupuesto (spec Tarea 3) ──────────────────────────────────
     # Sin persistencia: se deriva de nuevo en cada render. NO se recalcula "cumple" de

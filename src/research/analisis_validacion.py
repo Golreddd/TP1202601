@@ -8,8 +8,8 @@ Analisis complementarios sobre el CONJUNTO DE VALIDACION (20 %) con el modelo de
   4. Estabilidad frente a la particion: 5 semillas (42, 1, 7, 13, 99), mismo protocolo.
   5. Sensibilidad a la limpieza: 6 configuraciones, mismos hiperparametros y protocolo.
 
-Uso:   python -m src.analisis_validacion
-Salida: models/analisis_validacion.json y figuras en models/figuras/
+Uso:   python -m src.research.analisis_validacion
+Salida: models/investigacion/analisis_validacion.json y figuras en models/investigacion/figuras/
 """
 from __future__ import annotations
 
@@ -27,12 +27,12 @@ from scipy.stats.mstats import winsorize
 from sklearn.metrics import (accuracy_score, confusion_matrix, f1_score, roc_auc_score,
                              roc_curve)
 
-from .preprocessing import (DEDUP_COLS, GASTO_COLS, add_features, binary_target,
-                            referential_features)
-from .train import _DATASET, _MODELS, _split, fit_final, load_xy
+from ..pipeline.preprocessing import (DEDUP_COLS, GASTO_COLS, add_features, binary_target,
+                                      referential_features)
+from ..pipeline.train import _DATASET, _INVESTIGACION, _MODELS, _split, fit_final, load_xy
 
 warnings.filterwarnings("ignore")
-FIG = _MODELS / "figuras"
+FIG = _INVESTIGACION / "figuras"
 SEEDS = [42, 1, 7, 13, 99]
 
 NOMBRES = {
@@ -190,7 +190,7 @@ def main():
         rep["sensibilidad"][nombre] = {"n": int(len(dd)), "roc_auc": float(roc_auc_score(yy[b], pp)),
                                        "accuracy": float(accuracy_score(yy[b], (pp >= 0.5).astype(int)))}
 
-    with open(_MODELS / "analisis_validacion.json", "w", encoding="utf-8") as f:
+    with open(_INVESTIGACION / "analisis_validacion.json", "w", encoding="utf-8") as f:
         json.dump(rep, f, ensure_ascii=False, indent=2)
     print(json.dumps({k: v for k, v in rep.items() if k != "shap_mean_abs"}, ensure_ascii=False, indent=1))
     print("SHAP:", {k: round(v, 3) for k, v in rep["shap_mean_abs"].items()})

@@ -1,3 +1,6 @@
+"""
+Modelos de la app accounts: Usuario (auth + perfil financiero embebido) y Rol (RBAC).
+"""
 from django.contrib.auth.models import AbstractUser
 from django.db import models
 
@@ -54,7 +57,7 @@ class Usuario(AbstractUser):
     - Rol asignado via FK a Rol (no boolean is_staff directo).
     - is_staff se sincroniza automáticamente con el rol al hacer save().
     - Campos de perfil financiero integrados directamente (sin tabla 1:1 extra):
-        edad, nivel_educ, miembros_hogar  → requeridos por src/predict.py
+        edad, nivel_educ, miembros_hogar  → requeridos por src/pipeline/predict.py
         telefono, ciudad                  → opcionales, solo UI
     """
     NIVEL_EDUC_CHOICES = [
@@ -117,6 +120,20 @@ class Usuario(AbstractUser):
     ciudad   = models.CharField(
         max_length=100, blank=True, default='Lima', verbose_name='Ciudad',
         validators=[validar_ciudad],
+    )
+
+    # ── Asistente de voz ──────────────────────────────────────────────────────
+    registros_voz = models.PositiveIntegerField(
+        default=0,
+        verbose_name='Registros hechos por voz',
+        help_text='Cuántas veces confirmó un registro dictado (logros Manos Libres / Asistente Fiel).',
+    )
+
+    # ── Notificaciones ────────────────────────────────────────────────────────
+    recordatorio_semanal_activo = models.BooleanField(
+        default=False,
+        verbose_name='Recordatorio semanal por correo',
+        help_text='Recibe un correo si no registraste tus ingresos/gastos esa semana.',
     )
 
     USERNAME_FIELD  = 'email'

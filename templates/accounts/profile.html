@@ -52,6 +52,15 @@
               {{ perfil_form.ciudad }}
             </div>
           </div>
+          <div class="form-group">
+            <label class="form-label" style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+              {{ perfil_form.recordatorio_semanal_activo }}
+              🔔 Avisarme si no registro nada en la semana
+            </label>
+            <div class="text-sm text-muted" style="margin-top:4px;">
+              Te llega un correo si pasa la semana sin que registres tus ingresos o gastos.
+            </div>
+          </div>
           <button type="submit" class="btn btn-primary btn-sm">Guardar Cambios</button>
         </form>
       </div>

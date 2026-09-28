@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load l10n %}
+{% load l10n static %}
 {% block title %}Dashboard{% endblock %}
 {% block page_title %}Dashboard{% endblock %}
 
@@ -18,8 +18,13 @@ Cada bloque es un enlace a la pantalla donde ese dato se analiza a fondo (clase
     <div class="page-title">Hola, {{ user.nickname|default:user.email }} 👋</div>
     <div class="page-sub">Tu resumen financiero de SmartSave</div>
   </div>
-  <a href="{% url 'financiero:registro_create' %}" class="btn btn-primary btn-sm">+ Nuevo Registro</a>
+  <div class="page-header-actions">
+    <button type="button" class="btn btn-outline btn-sm" id="btn-asistente-voz">🎤 Habla con SmartSave</button>
+    <a href="{% url 'financiero:registro_create' %}" class="btn btn-primary btn-sm">+ Nuevo Registro</a>
+  </div>
 </div>
+
+{% include "financiero/partials/_modal_voz.html" %}
 
 {% if tiene_datos %}
 
@@ -203,4 +208,5 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 </script>
+<script src="{% static 'js/voz.js' %}?v=2"></script>
 {% endblock %}

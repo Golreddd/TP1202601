@@ -396,3 +396,229 @@ templates/recomendaciones/ml_insights.html        (punto 21)
 templates/recomendaciones/_resultado_ml.html      (punto 21)
 templates/recomendaciones/_resultado_ml_js.html   (punto 21)
 ```
+
+---
+
+## 24. Reorganización de la estructura del proyecto (sin cambios de funcionalidad)
+
+Reordenamiento puro de carpetas/archivos y documentación nueva, pensado para
+que el código sea legible en un ámbito académico (tesis) y profesional. No se
+modificó ninguna lógica interna, solo ubicaciones, nombres e imports.
+
+**Movimientos de archivos:**
+- `dataset2.csv` y `dataset_final_limpio.csv` → `data/` (antes en la raíz).
+- `src/` dividido en `src/pipeline/` (código de producción que usa Django:
+  `preprocessing.py`, `train.py`, `predict.py`) y `src/research/` (scripts de
+  validación académica: `ablation.py`, `eval_planes.py`, `stats_tests.py`,
+  `analisis_validacion.py`, `umbral_segmento.py`).
+- `models/` dividido: la raíz conserva los artefactos de producción sin
+  cambios (`*.pkl`, `features.json`, `metrics.json`, `xgb_best_params.json`);
+  las salidas exclusivas de `src/research/` (JSONs de ablación, pruebas
+  estadísticas, análisis de validación, umbral por segmento, y la carpeta
+  `figuras/`) se movieron a `models/investigacion/`.
+- `recomendaciones/trends.py` → `recomendaciones/analitica.py` (único archivo
+  del proyecto con nombre en inglés; se alinea con la convención en español
+  del resto de módulos).
+- `templates/recomendaciones/_resultado_ml.html` y `_resultado_ml_js.html` →
+  `templates/recomendaciones/partials/`, para distinguir los fragmentos
+  reutilizables de las plantillas completas.
+- `core/permissions.py`: se eliminaron `EsUsuarioNormal`, `EsDueño` y
+  `EsAdminODueño` (confirmadas sin ningún uso en el resto del proyecto).
+
+**Archivos actualizados por los movimientos anteriores** (imports y
+referencias de ruta, sin cambios de lógica): `sigamos/settings.py`,
+`panel_admin/models.py`, `panel_admin/management/commands/recalcular_validacion_ml.py`,
+`api/v1/views/recomendaciones.py`, `financiero/management/commands/seed_demo_users.py`,
+`financiero/views.py`, `recomendaciones/models.py`, `recomendaciones/views.py`,
+`gamificacion/views.py`, `gamificacion/services.py`,
+`templates/recomendaciones/historial_detalle.html`,
+`templates/recomendaciones/ml_insights.html`.
+
+**Documentación nueva:**
+- `README.md` (no existía): descripción del proyecto, mapa de carpetas,
+  instalación y cómo ejecutar el pipeline ML.
+- `docs/ARQUITECTURA.md` (nuevo): diseño del sistema, flujo de un análisis
+  ML de punta a punta, y las limitaciones de diseño conocidas (imports
+  diferidos entre apps, lógica de negocio en algunas vistas).
+- Se agregó un docstring de módulo (1–3 líneas) a los archivos `.py` que no
+  lo tenían, en todas las apps.
+
+**Verificación realizada:** `python manage.py check`, importación directa de
+cada módulo movido/renombrado (`src.pipeline.*`, `src.research.*`,
+`recomendaciones.analitica`, y todos los módulos Django que los consumen), y
+`python -m py_compile` sobre todos los archivos tocados.
+
+---
+
+## 25. Asistente de voz ("🎤 Habla con SmartSave")
+
+Registrar ingresos/gastos y preguntar por el estado financiero por voz (o
+texto) desde el dashboard, sin depender de ningún servicio de pago: la
+transcripción la hace el navegador (Web Speech API, `es-PE`) y la
+interpretación es un parser de reglas en Python puro (sin LLM), con jerga
+peruana. Ver `docs/ARQUITECTURA.md` §7 para el diagrama de flujo completo.
+
+**Backend nuevo:**
+- `financiero/voz_vocabulario.py` — jerga/sinónimos por categoría de gasto,
+  tipo de ingreso, verbos, periodo y preguntas (datos, sin lógica).
+- `financiero/voz.py::interpretar(texto, contexto_previo)` — parser puro:
+  normaliza el texto, extrae montos (dígitos y números en palabras, con
+  decenas/centenas/"mil"/decimales por "con"), detecta categoría de gasto o
+  tipo de ingreso, y distingue registrar / consultar / mixta (gasto +
+  pregunta a la vez, ej. "gasto 50 soles ¿cuánto me queda?") / simulación
+  ("si gasto 50 en ropa…") / desconocida. Todo gasto exige una categoría de
+  las 8 de `RegistroMensual` — nunca se guarda un monto suelto; si falta un
+  dato, el turno siguiente se interpreta concatenado (`contexto_previo`), sin
+  guardar estado de conversación en el servidor.
+- `financiero/voz_servicios.py` — conecta el parser con la BD:
+  `previsualizar()` (antes/después de cada ítem e impacto en el presupuesto
+  por categoría del plan activo, sin guardar), `aplicar()` (suma al
+  `RegistroMensual` del mes actual —lo crea si no existe—, actualiza racha y
+  logros, y devuelve un token firmado para deshacer), `deshacer()` (revierte
+  por token, válido 10 minutos; borra el registro si quedó en 0 y lo creó esa
+  acción) y `responder()` (gasto/ingreso/ahorro total, por categoría, "en qué
+  gasto más", presupuesto restante, cumplimiento del plan, comparación con el
+  mes pasado). Nunca se guarda el audio ni el texto dictado.
+- `recomendaciones/analitica.py::presupuesto_por_categoria()` — se extrajo de
+  `gamificacion/views.py::progreso` (antes duplicaba el cálculo) para que
+  Progreso y el asistente de voz usen la misma fuente.
+- `accounts.Usuario.registros_voz` (nuevo campo) y logros `MANOS_LIBRES`
+  (1er registro por voz) / `ASISTENTE_FIEL` (10 registros), sembrados en
+  `gamificacion/migrations/0010_seed_logros_voz.py`.
+- API v1: `POST /api/v1/voz/interpretar|confirmar|deshacer/`
+  (`api/v1/views/voz.py`, `api/v1/serializers/voz.py`) — revalida categoría/
+  tipo/monto en el servidor aunque el cliente ya los haya recibido de
+  `/interpretar/`.
+
+**Frontend nuevo:**
+- Botón "🎤 Habla con SmartSave" en el dashboard, a la izquierda de
+  "+ Nuevo Registro" (`templates/financiero/dashboard.html`,
+  `templates/financiero/partials/_modal_voz.html`).
+- `static/js/voz.js` — `SpeechRecognition`, máquina de estados del modal
+  (escuchando / confirmar con impacto en el plan / éxito con logros y
+  "Deshacer" / respuesta con lectura en voz (`speechSynthesis`) / falta un
+  dato (chips de categoría o tipo de ingreso) / no entendido con ejemplos
+  dinámicos / texto como respaldo si el navegador no soporta voz o se negó
+  el micrófono).
+- `static/css/sigamos.css` (`?v=13`): clases nuevas y acotadas para el
+  asistente (`.page-header-actions`, `.voz-*`); reutiliza `.budget-card`/
+  `.budget-bar` (ya usadas en Progreso) para el impacto en el plan, y el
+  patrón `.page-header` con dos botones ya es responsive (se apilan en
+  móvil sin CSS adicional).
+
+**Tests nuevos** (el proyecto no tenía ninguno): `financiero/tests/test_voz.py`
+(parser puro + servicios contra la BD de test) y `api/v1/tests/test_voz.py`
+(flujo completo interpretar → confirmar → deshacer vía API, autenticación,
+validación de payload).
+
+**Verificación realizada:** batería manual de ~40 frases del parser
+(jerga, números en palabras, varios montos por frase, ingresos por tipo,
+preguntas de cada tipo, mixta/simulación, moneda extranjera rechazada);
+`python manage.py test financiero.tests.test_voz api.v1.tests.test_voz`;
+flujo end-to-end con el test client de Django (interpretar → confirmar →
+deshacer) sobre un usuario descartable, creado y eliminado en la misma
+prueba; render real del dashboard (`GET /financiero/`) confirmando que el
+botón, el modal y los archivos estáticos nuevos cargan con 200; funciones
+de renderizado de `voz.js` ejercitadas con un DOM simulado en Node.
+
+---
+
+## 26. Asistente de voz — ajustes tras la primera prueba de uso
+
+- **La grabación ya no se cortaba tras la primera pausa.** `static/js/voz.js`
+  usaba `SpeechRecognition` en modo de una sola frase; ahora es
+  `continuous:true` y el usuario dice todo lo que necesite hasta pulsar el
+  nuevo botón **"⏹ Terminé de hablar"** (`vozDetenerEscucha()`), que se ve
+  claramente más grande que el resto (clase `.btn-voz-detener`, ancho
+  completo, texto más grande) porque es la acción que más se usa.
+- **Tope de 1 minuto** por grabación (`VOZ_MAX_MS`): si nadie pulsa el botón,
+  se corta sola, avisa con un toast y procesa igual lo que se alcanzó a decir.
+- **Vocabulario de marcas conocidas** (Perú) en `financiero/voz_vocabulario.py`,
+  para cuando el usuario menciona dónde gastó y no solo la categoría genérica:
+  restaurantes/supermercados (KFC, Bembos, Plaza Vea, Tottus…), ropa (Zara,
+  Nike, Ripley…), servicios del hogar (Sedapal, Calidda, Sodimac…), salud
+  (Rímac, Inkafarma, clínicas…), transporte (Uber, Primax, Repsol…),
+  streaming (Netflix, HBO Max…), universidades (PUCP, UPC, UTP…) y
+  entretenimiento (Cineplanet, PlayStation…) — sin colisiones entre
+  categorías (verificado programáticamente).
+
+**Verificación:** simulación de los eventos reales de `SpeechRecognition`
+(varias frases seguidas → un solo envío al soltar "Terminé de hablar";
+cierre a medias → no procesa nada; permiso denegado → cae a texto; nadie
+habla → "no entendido"); `python manage.py test financiero.tests.test_voz
+api.v1.tests.test_voz` (43 tests); frases sueltas con las marcas nuevas
+para confirmar que resuelven a la categoría correcta.
+
+---
+
+## 27. Asistente de voz — corrección de bugs reales tras la segunda prueba de uso
+
+El usuario reportó que el asistente "se quedaba en bucle" al no entender
+frases con jerga de dinero, y que los ingresos casi nunca se detectaban.
+Investigando cada caso salieron **cuatro bugs reales** (no solo vocabulario
+faltante):
+
+- **El bug del "bucle" era real, en el frontend.** Al llegar a "No entendí
+  eso" y elegir "✍️ Escribir", `vozState.contextoPrevio` (el texto fallido
+  anterior) **no se limpiaba** — el botón "🎤 Intentar de nuevo" sí lo hacía,
+  pero "Escribir" no. El usuario escribía algo nuevo y quedaba pegado al
+  intento fallido de antes, arrastrando el error indefinidamente. Corregido
+  en `static/js/voz.js`; además se agregó un enlace "¿Se quedó atascado?
+  Empezar de nuevo" en la vista de dato faltante, como salvavidas visible.
+- **Jerga de billetes con valor propio, no solo "jerga de soles".** Antes
+  "lucas" solo se trataba como sinónimo de "soles" (necesitaba un número
+  adelante). Ahora `financiero/voz_vocabulario.py` tiene un diccionario
+  `DENOMINACIONES` (luca/luquita=1, cheque/cheke=10, ferro/ferrito=100) que
+  funciona como "mil": la palabra POR SÍ SOLA vale ese monto ("un cheque"=10,
+  "gasté un ferro"=100) y con un número adelante lo multiplica ("20
+  cheques"=200). Esto obligó a reescribir `_extraer_todos_los_numeros` en
+  `financiero/voz.py` en un solo paso (antes dígitos y palabras se procesaban
+  por separado, lo que no permitía combinar "20" + "cheques").
+- **Categorías no reconocían su propio plural.** "comida" no encontraba
+  "comidas" (coincidencia de palabra completa). Nuevo helper
+  `_contiene_o_plural` (acepta 's' final) usado solo en categorías/tipos de
+  ingreso, no en verbos ni preguntas. De paso se encontró que dos categorías
+  ni siquiera tenían su propio nombre formal en la lista ("educación",
+  "comunicaciones") — agregado.
+- **Ingresos con verbo en singular no se detectaban.** El vocabulario solo
+  tenía formas plurales/impersonales ("me dieron", "me pagaron"); "mi tío me
+  dio 30 soles de propina" no matcheaba porque faltaba "me dio" (singular).
+  Se agregaron las contrapartes singulares de todos los verbos de ingreso, se
+  amplió la lista de familiares en `bonif_monto` (tío/tía, no solo
+  mamá/papá/abuelos) y se agregó "propina"/"propinas" como palabra clave
+  directa.
+- **Al agregar los verbos en singular apareció un choque nuevo**: "pago" es
+  verbo de GASTO ("pago 50 de luz") pero también aparece dentro de la frase
+  de INGRESO "me pago" (de "me pagó" — sin tilde por la normalización, "mi
+  jefe me pagó 200" y "me pago 200" quedan igual de texto). Con el orden
+  anterior, el gasto ganaba siempre porque se evaluaba primero. Se reordenó
+  la prioridad en `_procesar_segmento`: una palabra clave concreta
+  (`campo_ingreso`/`campo_gasto`) pesa más que un verbo suelto, y entre
+  verbos sueltos ingreso pesa más que gasto — así "me pago 200 de sueldo" se
+  reconoce como ingreso y "pago 50 de luz" (sin "me") sigue siendo gasto.
+
+**Verificación:** las 3 frases reales que reportó el usuario ahora se
+interpretan correctamente (probado directamente con `interpretar()`);
+17 tests nuevos en `financiero/tests/test_voz.py` cubriendo denominaciones,
+plurales, verbos de ingreso en singular y el choque "pago"/"me pago";
+`python manage.py test financiero.tests.test_voz api.v1.tests.test_voz`
+(55 tests); sin colisiones nuevas entre categorías (verificado
+programáticamente).
+
+---
+
+## 28. Asistente de voz — transcripción en el aviso de exceso de plan
+
+En la pantalla de confirmación ("Esto entendí:"), cuando el gasto dictado
+hacía que una categoría se pasara del plan, aparecía un aviso ⚠️ "Con esto te
+pasarías de tu plan. Puedes compensar con: ..." — sonaba a error del sistema
+más que a información útil. Se reemplazó ese aviso puntual por la
+transcripción tal cual se entendió ("🎤 Escuché: '...'"), así el usuario
+puede revisar de una si el exceso viene de algo mal reconocido antes de
+confirmar. Las tarjetas de presupuesto de abajo (categoría, gastado/sugerido,
+excedido) siguen igual, así que no se pierde esa información, solo la frase
+de alarma. El mensaje de respuesta a una pregunta de paso (ej. "no tienes
+ningún registro de este mes"), que en una iteración anterior se había
+reemplazado por error por esta misma transcripción, volvió a su lugar y
+comportamiento original. Cambio solo en `static/js/voz.js`
+(`vozVistaConfirmar`), sin tocar el parser ni el backend.

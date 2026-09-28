@@ -1,3 +1,6 @@
+"""
+URLs de financiero: dashboard, CRUD de registros mensuales y análisis.
+"""
 from django.urls import path
 from financiero import views
 

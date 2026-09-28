@@ -1,3 +1,6 @@
+"""
+Señales de accounts: inicializa rol y Racha al crear un Usuario nuevo.
+"""
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.conf import settings

@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% if dias_racha > 0 %}Tu racha está en riesgo{% else %}No has registrado esta semana{% endif %}</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f1f5f9;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f1f5f9;padding:24px 12px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;background-color:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 16px rgba(15,23,42,.08);">
+
+          <tr>
+            <td style="background-color:#1e40af;padding:28px 24px;text-align:center;">
+              <div style="font-size:40px;line-height:1;">{% if dias_racha > 0 %}🔥{% else %}⏰{% endif %}</div>
+              <div style="color:#ffffff;font-size:20px;font-weight:800;margin-top:8px;">
+                {% if dias_racha > 0 %}¡Tu racha está en peligro!{% else %}¡No te quedes atrás!{% endif %}
+              </div>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding:28px 24px 8px 24px;">
+              <p style="margin:0 0 16px 0;font-size:16px;color:#0f172a;">
+                Hola <strong>{{ nickname }}</strong> 👋
+              </p>
+
+              {% if dias_racha > 0 %}
+              <p style="margin:0 0 16px 0;font-size:15px;color:#334155;line-height:1.5;">
+                Llevabas una racha de <strong>{{ dias_racha }} día{{ dias_racha|pluralize }} 🔥</strong> registrando
+                tus finanzas, pero esta semana todavía no has anotado nada. Si se te pasa el domingo, la
+                pierdes — y toca empezar de cero.
+              </p>
+              {% else %}
+              <p style="margin:0 0 16px 0;font-size:15px;color:#334155;line-height:1.5;">
+                Esta semana no has registrado tus ingresos ni tus gastos en SmartSave. Solo toma un par de
+                minutos, y es la única forma de que tu análisis financiero siga siendo útil. 💸
+              </p>
+              {% endif %}
+
+              <p style="margin:0 0 24px 0;font-size:15px;color:#334155;line-height:1.5;">
+                No dejes que la semana se te escape. Entra ahora y ponte al día:
+              </p>
+
+              <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 24px auto;">
+                <tr>
+                  <td style="border-radius:10px;background-color:#1e40af;">
+                    <a href="{{ link_registro }}"
+                       style="display:inline-block;padding:14px 28px;font-size:15px;font-weight:700;color:#ffffff;text-decoration:none;">
+                      Registrar mi semana →
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin:0 0 8px 0;font-size:13px;color:#64748b;line-height:1.5;text-align:center;">
+                Cada registro te acerca a tus metas de ahorro y mantiene vivo tu progreso en SmartSave.
+              </p>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding:16px 24px 24px 24px;border-top:1px solid #e2e8f0;">
+              <p style="margin:0;font-size:12px;color:#94a3b8;text-align:center;line-height:1.5;">
+                Recibiste este correo porque activaste el recordatorio semanal en tu perfil de SmartSave.
+                Puedes desactivarlo cuando quieras desde tu perfil.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

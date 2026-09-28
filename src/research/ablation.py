@@ -24,10 +24,10 @@ esa distancia es la evidencia de que las 18 features no reconstruyen la identida
 contable ingreso - gasto.
 
 Uso (desde la raiz del repo):
-    python -m src.ablation
-    python -m src.ablation --dataset ruta/al/limpio.csv
+    python -m src.research.ablation
+    python -m src.research.ablation --dataset ruta/al/limpio.csv
 
-Salida: tabla por consola y models/ablation.json
+Salida: tabla por consola y models/investigacion/ablation.json
 """
 from __future__ import annotations
 
@@ -41,11 +41,11 @@ from sklearn.metrics import (accuracy_score, f1_score, matthews_corrcoef,
                              precision_score, recall_score, roc_auc_score)
 from sklearn.preprocessing import StandardScaler
 
-from .preprocessing import (GASTO_COLS, add_features, binary_target,
-                            clean_dataset, referential_features)
-from .train import _DATASET, _MODELS, _ROOT, _split, fit_final
+from ..pipeline.preprocessing import (GASTO_COLS, add_features, binary_target,
+                                      clean_dataset, referential_features)
+from ..pipeline.train import _DATASET, _INVESTIGACION, _MODELS, _ROOT, _split, fit_final
 
-_CLEAN_DEFAULT = _ROOT / "dataset_final_limpio.csv"
+_CLEAN_DEFAULT = _ROOT / "data" / "dataset_final_limpio.csv"
 
 DEMOGRAFICAS = ["NIVEL_EDUC", "MIEMBROS_HOGAR"]
 TIPO_INGRESO = ["TIPO_FORMAL", "TIPO_INFORMAL", "TIPO_MIXTO", "DEPENDE_INFORMAL"]
@@ -159,7 +159,7 @@ def main(dataset=None, iqr_factor=2.5):
               f"(publicado {pub['accuracy']:.4f}), auc {m4['roc_auc']:.4f} "
               f"(publicado {pub['roc_auc']:.4f})")
 
-    salida = _MODELS / "ablation.json"
+    salida = _INVESTIGACION / "ablation.json"
     with open(salida, "w", encoding="utf-8") as f:
         json.dump(rep, f, ensure_ascii=False, indent=2)
     print(f"\nResultados guardados en {salida}\n")
@@ -169,7 +169,7 @@ def main(dataset=None, iqr_factor=2.5):
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--dataset", type=str, default=None,
-                    help="CSV limpio (por defecto dataset_final_limpio.csv en la raiz)")
+                    help="CSV limpio (por defecto data/dataset_final_limpio.csv)")
     ap.add_argument("--iqr-factor", type=float, default=2.5)
     a = ap.parse_args()
     main(dataset=a.dataset, iqr_factor=a.iqr_factor)

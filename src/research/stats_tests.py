@@ -7,7 +7,7 @@ Comparacion equivalente (observacion del revisor):
     XGBoost: Optuna (TPE, 40 trials, semilla 42) maximizando macro-F1 por CV 3-fold
     SOLO sobre el 80 % de entrenamiento, con el mismo escalado.
   - XGBoost es el modelo de produccion (models/xgb_clf_model.pkl), ajustado con ese
-    mismo protocolo en src/train.py.
+    mismo protocolo en src/pipeline/train.py.
   - El 20 % de validacion solo se usa aqui, una vez, para evaluar.
 
 Calcula sobre la validacion:
@@ -15,8 +15,8 @@ Calcula sobre la validacion:
      IC 95 % bootstrap (2,000 repeticiones).
   2. DeLong (AUC), McNemar (aciertos pareados) y bootstrap pareado de F1.
 
-Uso:   python -m src.stats_tests
-Salida: models/stats_tests.json
+Uso:   python -m src.research.stats_tests
+Salida: models/investigacion/stats_tests.json
 """
 from __future__ import annotations
 
@@ -36,7 +36,7 @@ from sklearn.metrics import (accuracy_score, f1_score, matthews_corrcoef,
 from sklearn.model_selection import StratifiedKFold
 from sklearn.preprocessing import StandardScaler
 
-from .train import N_TRIALS, RANDOM_STATE, _MODELS, _split, load_xy
+from ..pipeline.train import N_TRIALS, RANDOM_STATE, _INVESTIGACION, _MODELS, _split, load_xy
 
 warnings.filterwarnings("ignore")
 optuna.logging.set_verbosity(optuna.logging.WARNING)
@@ -260,7 +260,7 @@ def main(n_boot=2000, seed=42):
         print(f"{a} vs {b}: DeLong dif={auc_a-auc_b:+.4f} p={p:.4f} | McNemar p={pm:.4f} "
               f"| F1 dif={obs:+.4f} IC[{lo:+.4f},{hi:+.4f}] p={pf:.4f}")
 
-    salida = Path(_MODELS) / "stats_tests.json"
+    salida = Path(_INVESTIGACION) / "stats_tests.json"
     with open(salida, "w", encoding="utf-8") as f:
         json.dump(rep, f, ensure_ascii=False, indent=2)
     print(f"\nResultados guardados en {salida}\n")

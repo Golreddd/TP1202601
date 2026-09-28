@@ -1,3 +1,6 @@
+"""
+URLs de panel_admin: gestión de usuarios, actividad, métricas y validación ML.
+"""
 from django.urls import path
 from panel_admin import views
 
@@ -7,6 +10,7 @@ urlpatterns = [
     path('usuarios/',                       views.user_list,         name='user_list'),
     path('usuarios/<int:pk>/',              views.user_detail,       name='user_detail'),
     path('usuarios/<int:pk>/estado/',       views.user_toggle_active, name='user_toggle'),
+    path('recordatorios/enviar/',           views.enviar_recordatorios, name='enviar_recordatorios'),
     path('actividad/',                      views.activity_log,      name='activity'),
     path('metricas/',                       views.metrics_view,      name='metrics'),
     path('validacion-ml/',                  views.validacion_ml,     name='validacion_ml'),

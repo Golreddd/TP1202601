@@ -1,3 +1,6 @@
+"""
+Vistas de accounts: login, registro, logout y edición de perfil (incluye campos ML).
+"""
 import logging
 
 from django.contrib import messages

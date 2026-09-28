@@ -1,3 +1,7 @@
+"""
+Modelos de panel_admin: AuditLog (trazabilidad) y ValidacionPrimerUso (evaluación
+externa del modelo ML contra los primeros análisis reales de cada usuario).
+"""
 from django.db import models
 from django.conf import settings
 
@@ -17,6 +21,7 @@ class AuditLog(models.Model):
         ('CAMBIAR_ROL',        'Cambiar rol de usuario'),
         ('EXPORTAR_DATOS',     'Exportar datos del sistema'),
         ('VER_ESTADISTICAS',   'Ver estadísticas del sistema'),
+        ('ENVIAR_RECORDATORIOS', 'Enviar recordatorios semanales de registro'),
     ]
 
     admin = models.ForeignKey(
@@ -136,7 +141,7 @@ class ValidacionPrimerUso(models.Model):
     def registrar_si_primero(cls, resultado):
         """Crea el caso de prueba del usuario a partir de `resultado` si aún no tiene
         uno. Devuelve la instancia creada o None si ya existía."""
-        from src.preprocessing import ahorro_identidad, gasto_total, ing_total
+        from src.pipeline.preprocessing import ahorro_identidad, gasto_total, ing_total
 
         if cls.objects.filter(usuario_id=resultado.usuario_id).exists():
             return None

@@ -1,3 +1,7 @@
+"""
+Vistas de financiero: dashboard, CRUD de registros mensuales, distribución de
+ahorro y análisis (gráficos de ingresos/gastos por categoría y tendencia).
+"""
 import json
 from datetime import date
 from decimal import Decimal, InvalidOperation
@@ -408,7 +412,7 @@ def analisis(request):
 
     # Categoría con mayor crecimiento del historial (capa multi-mes ya existente).
     # Permite reportar tanto el caso crítico como el equilibrado (sin crecimiento).
-    from recomendaciones.trends import analizar_tendencia
+    from recomendaciones.analitica import analizar_tendencia
     tendencia = analizar_tendencia(request.user)
 
     # Tabla "Detalle por Período": TODOS los períodos, paginados (8 por página).

@@ -1,3 +1,6 @@
+"""
+Configuración de la app Django `financiero`.
+"""
 from django.apps import AppConfig
 
 

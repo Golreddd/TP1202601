@@ -79,9 +79,9 @@ def _racha_plan_cumplido(usuario) -> int:
     """Cuenta cuántos meses consecutivos, del más reciente hacia atrás, el usuario
     cumplió el plan de recorte que tiene activo — mismo criterio de 'cumple' (10% de
     tolerancia) que ya usa gamificacion/views.py::progreso, vía la única fuente en
-    recomendaciones.trends.comparacion_plan (no se reinventa el umbral aquí)."""
+    recomendaciones.analitica.comparacion_plan (no se reinventa el umbral aquí)."""
     from recomendaciones.models import PlanSeleccionado
-    from recomendaciones.trends import comparacion_plan
+    from recomendaciones.analitica import comparacion_plan
 
     plan_activo = PlanSeleccionado.objects.filter(
         usuario=usuario, activo=True
@@ -131,6 +131,7 @@ def verificar_y_otorgar_logros(usuario, contexto: str = '') -> list:
         'ml'              → después de ejecutar un análisis ML
         'perfil'          → después de actualizar datos de perfil
         'meta_completada' → después de que una MetaLargoPlazo alcanza 100%
+        'voz'             → después de confirmar un registro dictado por voz
 
     Retorna
     -------
@@ -191,6 +192,14 @@ def verificar_y_otorgar_logros(usuario, contexto: str = '') -> list:
             nuevos.append('META_MENSUAL_CUMPLIDA')
         if racha_metas >= 3 and _otorgar(usuario, 'RACHA_METAS_3'):
             nuevos.append('RACHA_METAS_3')
+
+    # ── Logros del ASISTENTE DE VOZ ────────────────────────────────────────────
+    if contexto == 'voz':
+        total_voz = usuario.registros_voz
+        if total_voz >= 1 and _otorgar(usuario, 'MANOS_LIBRES'):
+            nuevos.append('MANOS_LIBRES')
+        if total_voz >= 10 and _otorgar(usuario, 'ASISTENTE_FIEL'):
+            nuevos.append('ASISTENTE_FIEL')
 
     # ── Logros de ANÁLISIS ML ─────────────────────────────────────────────────
     if contexto == 'ml':

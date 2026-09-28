@@ -36,7 +36,7 @@ import pandas as pd
 from .preprocessing import (CLASS_LABELS, ESENCIAL, GASTO_COLS,
                             ahorro_identidad, build_feature_row, gasto_total, ing_total)
 
-_MODELS_DIR = Path(__file__).resolve().parent.parent / "models"
+_MODELS_DIR = Path(__file__).resolve().parent.parent.parent / "models"
 _CACHE: dict = {}
 
 MAX_CUT_FRAC = 0.40  # fallback si una categoría no está en MAX_CUT_BY_CAT
@@ -157,7 +157,7 @@ def load_models() -> dict:
     for key, fname in needed.items():
         path = _MODELS_DIR / fname
         if not path.exists():
-            raise FileNotFoundError(f"Artefacto no encontrado: {path}. Ejecuta `python -m src.train`.")
+            raise FileNotFoundError(f"Artefacto no encontrado: {path}. Ejecuta `python -m src.pipeline.train`.")
         out[key] = joblib.load(path)
     with open(_MODELS_DIR / "features.json", encoding="utf-8") as f:
         out["features"] = json.load(f)

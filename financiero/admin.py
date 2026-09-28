@@ -1,3 +1,6 @@
+"""
+Registro de RegistroMensual en el admin interno de Django.
+"""
 from django.contrib import admin
 from financiero.models import RegistroMensual
 
