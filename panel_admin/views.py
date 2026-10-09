@@ -5,7 +5,12 @@ del modelo ML y validación externa (matriz de confusión, evolución del ahorro
 import csv
 import json
 import logging
+from io import BytesIO
 from pathlib import Path
+
+from openpyxl import Workbook
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+from openpyxl.utils import get_column_letter
 
 from django.conf import settings
 from django.contrib import messages
@@ -333,6 +338,82 @@ def validacion_ml_export(request):
             c.tipo, 'Sí' if c.acierto else 'No',
             timezone.localtime(c.creado_en).strftime('%d/%m/%Y %H:%M'),
         ])
+    return response
+
+
+@staff_member_required
+def validacion_ml_export_excel(request):
+    casos = (ValidacionPrimerUso.objects
+             .select_related('usuario')
+             .filter(usuario__is_active=True)
+             .order_by('creado_en'))
+    AuditLog.registrar(
+        admin=request.user, accion='EXPORTAR_DATOS', request=request,
+        detalle=f'Exportación Excel de validación ML (primer uso): {casos.count()} casos',
+    )
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'Validación ML'
+
+    FONT = 'Arial'
+    headers = ['ID', 'Usuario', 'Correo', 'Período', 'Ingreso total (S/)', 'Gasto total (S/)',
+               'Ahorro real (S/)', 'Clase real', 'Clase predicha', 'Prob. ahorra',
+               'Confianza', 'Resultado', 'Acierto']
+
+    header_fill = PatternFill('solid', fgColor='1E3A8A')
+    header_font = Font(name=FONT, bold=True, color='FFFFFF', size=11)
+    thin = Side(style='thin', color='D1D5DB')
+    border = Border(left=thin, right=thin, top=thin, bottom=thin)
+
+    for col, h in enumerate(headers, start=1):
+        c = ws.cell(row=1, column=col, value=h)
+        c.font = header_font
+        c.fill = header_fill
+        c.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+        c.border = border
+    ws.row_dimensions[1].height = 28
+
+    acierto_fill = PatternFill('solid', fgColor='DCFCE7')
+    error_fill = PatternFill('solid', fgColor='FEE2E2')
+
+    for i, c in enumerate(casos, start=2):
+        valores = [
+            c.id, c.usuario.nickname, c.usuario.email, c.periodo.strftime('%Y-%m'),
+            float(c.ing_total), float(c.gasto_total), float(c.ahorro_real),
+            c.label_real, c.label_predicha, float(c.prob_ahorra), c.confianza,
+            c.tipo, 'Sí' if c.acierto else 'No',
+        ]
+        for col, v in enumerate(valores, start=1):
+            cell = ws.cell(row=i, column=col, value=v)
+            cell.font = Font(name=FONT)
+            cell.border = border
+            if col in (5, 6, 7):
+                cell.number_format = '#,##0.00'
+            elif col == 10:
+                cell.number_format = '0.000'
+            if col not in (2, 3):
+                cell.alignment = Alignment(horizontal='center')
+        fill = acierto_fill if c.acierto else error_fill
+        for col in range(1, len(headers) + 1):
+            if ws.cell(row=i, column=col).fill.fgColor.rgb in (None, '00000000'):
+                ws.cell(row=i, column=col).fill = fill
+
+    widths = {1: 6, 2: 22, 3: 32, 4: 10, 5: 16, 6: 16, 7: 16, 8: 12, 9: 14, 10: 12, 11: 12, 12: 12, 13: 10}
+    for col, w in widths.items():
+        ws.column_dimensions[get_column_letter(col)].width = w
+    ws.freeze_panes = 'A2'
+
+    buffer = BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+
+    fecha = timezone.localdate().strftime('%Y%m%d')
+    response = HttpResponse(
+        buffer.read(),
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    )
+    response['Content-Disposition'] = f'attachment; filename="validacion_ml_{fecha}.xlsx"'
     return response
 
 
