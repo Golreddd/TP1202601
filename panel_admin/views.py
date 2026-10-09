@@ -263,7 +263,10 @@ def validacion_ml(request):
     tipo   = request.GET.get('tipo', '').upper()
     search = request.GET.get('search', '').strip()
 
-    casos_qs = ValidacionPrimerUso.objects.select_related('usuario').order_by('-creado_en')
+    casos_qs = (ValidacionPrimerUso.objects
+                .select_related('usuario')
+                .filter(usuario__is_active=True)
+                .order_by('-creado_en'))
     if tipo in dict(ValidacionPrimerUso.TIPOS):
         casos_qs = casos_qs.filter(tipo=tipo)
     if search:
@@ -276,7 +279,7 @@ def validacion_ml(request):
     filtros   = request.GET.copy()
     filtros.pop('page', None)
 
-    resumen   = _resumen_validacion(ValidacionPrimerUso.objects.all())
+    resumen   = _resumen_validacion(ValidacionPrimerUso.objects.filter(usuario__is_active=True))
     publicado = _metricas_publicadas() or {}
     valid = publicado.get('valid', {})
     cv = publicado.get('cv_5fold_train', publicado.get('cv_5fold', {}))
@@ -306,7 +309,10 @@ def validacion_ml(request):
 
 @staff_member_required
 def validacion_ml_export(request):
-    casos = ValidacionPrimerUso.objects.select_related('usuario').order_by('creado_en')
+    casos = (ValidacionPrimerUso.objects
+             .select_related('usuario')
+             .filter(usuario__is_active=True)
+             .order_by('creado_en'))
     AuditLog.registrar(
         admin=request.user, accion='EXPORTAR_DATOS', request=request,
         detalle=f'Exportación de validación ML (primer uso): {casos.count()} casos',
@@ -415,7 +421,7 @@ def _resumen_evolucion(filas):
 
 def _usuarios_evolucion(request):
     """Usuarios de la tabla, aplicando la búsqueda y el filtro de la pantalla."""
-    usuarios = Usuario.objects.order_by('date_joined')
+    usuarios = Usuario.objects.filter(is_active=True).order_by('date_joined')
     search = request.GET.get('search', '').strip()
     if search:
         usuarios = usuarios.filter(
