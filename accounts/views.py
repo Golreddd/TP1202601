@@ -48,6 +48,8 @@ def login_view(request):
         if user is not None:
             login(request, user)
             _auditar_acceso_admin(user, 'LOGIN_ADMIN', request)
+            from gamificacion.models import actualizar_racha
+            actualizar_racha(user)
             return redirect(next_url)
         messages.error(request, 'Correo o contraseña incorrectos.')
 

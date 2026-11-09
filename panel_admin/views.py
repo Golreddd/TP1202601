@@ -25,7 +25,7 @@ from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
 
-from accounts.models import Usuario
+from accounts.models import Rol, Usuario
 from financiero.models import RegistroMensual
 from panel_admin.models import AuditLog, ValidacionPrimerUso
 
@@ -69,7 +69,45 @@ def user_detail(request, pk):
         usuario_objetivo=usuario,
         request=request,
     )
-    return render(request, 'panel_admin/user_detail.html', {'usuario': usuario})
+    return render(request, 'panel_admin/user_detail.html', {
+        'usuario': usuario,
+        'roles': Rol.objects.all(),
+    })
+
+
+@staff_member_required
+def user_change_rol(request, pk):
+    """POST /panel-admin/usuarios/<pk>/rol/ — cambia el rol de un usuario.
+
+    Una cuenta con rol Administrador no puede cambiar de rol desde aquí
+    (evita dejar el sistema sin administradores por error).
+    """
+    usuario = get_object_or_404(Usuario, pk=pk)
+    destino = redirect(reverse('panel_admin:user_detail', args=[pk]))
+
+    if request.method != 'POST':
+        return destino
+
+    if usuario.es_admin:
+        messages.error(request, 'No se puede cambiar el rol de una cuenta Administrador.')
+        return destino
+
+    nuevo_rol = Rol.objects.filter(nombre=request.POST.get('rol', '').strip().upper()).first()
+    if nuevo_rol is None:
+        messages.error(request, 'Rol inválido.')
+        return destino
+
+    rol_anterior = usuario.nombre_rol
+    usuario.rol = nuevo_rol
+    usuario.save()  # save() sincroniza is_staff automáticamente
+
+    AuditLog.registrar(
+        admin=request.user, accion='CAMBIAR_ROL', usuario_objetivo=usuario,
+        detalle=f'Rol cambiado de {rol_anterior} a {nuevo_rol.get_nombre_display()}.',
+        request=request,
+    )
+    messages.success(request, f'Rol de {usuario.nickname} actualizado a {nuevo_rol.get_nombre_display()}.')
+    return destino
 
 
 @staff_member_required
@@ -198,16 +236,40 @@ def activity_log(request):
 
 @staff_member_required
 def metrics_view(request):
+    from datetime import date
+
     from financiero.models import RegistroMensual
     from recomendaciones.models import ResultadoML
 
+    # Filtro opcional por período (?periodo=YYYY-MM): permite ver las métricas
+    # de un mes puntual en vez del total acumulado del sistema. Sirve, por
+    # ejemplo, para comprobar que un período sin registros ni análisis muestra
+    # los totales en cero sin errores, sin necesitar una base de datos vacía.
+    periodo_raw = request.GET.get('periodo', '').strip()
+    periodo = None
+    if periodo_raw:
+        try:
+            anio, mes = periodo_raw.split('-')
+            periodo = date(int(anio), int(mes), 1)
+        except (ValueError, TypeError):
+            periodo = None
+
     total_usuarios  = Usuario.objects.count()
     usuarios_activos = Usuario.objects.filter(is_active=True).count()
-    total_registros = RegistroMensual.objects.count()
-    total_ml        = ResultadoML.objects.count()
+
+    registros_qs  = RegistroMensual.objects.all()
+    resultados_qs = ResultadoML.objects.all()
+    validacion_qs = ValidacionPrimerUso.objects.all()
+    if periodo:
+        registros_qs  = registros_qs.filter(periodo=periodo)
+        resultados_qs = resultados_qs.filter(registro__periodo=periodo)
+        validacion_qs = validacion_qs.filter(periodo=periodo)
+
+    total_registros = registros_qs.count()
+    total_ml        = resultados_qs.count()
 
     clase_dist = (
-        ResultadoML.objects
+        resultados_qs
         .values('label_predicha')
         .annotate(total=Count('id'))
         .order_by('-total')
@@ -224,7 +286,8 @@ def metrics_view(request):
         'clase_dist':       clase_dist,
         'clase_labels':     clase_labels,
         'clase_data':       clase_data,
-        'validacion':       _resumen_validacion(ValidacionPrimerUso.objects.all()),
+        'validacion':       _resumen_validacion(validacion_qs),
+        'periodo_filtro':   periodo_raw,
     })
 
 

@@ -59,6 +59,9 @@ def _avisar_si_tiene_aportes(request, registro):
 @login_required
 def dashboard(request):
     """GET /financiero/ — Dashboard principal con datos reales."""
+    from gamificacion.models import actualizar_racha
+    actualizar_racha(request.user)
+
     registros_qs = list(
         RegistroMensual.objects.filter(usuario=request.user).order_by('-periodo')[:6]
     )
@@ -187,6 +190,8 @@ def registro_update(request, pk):
             try:
                 form.save()
                 _avisar_si_tiene_aportes(request, registro)
+                from gamificacion.models import actualizar_racha
+                actualizar_racha(request.user)
                 messages.success(request, '✅ Registro actualizado correctamente.')
                 return redirect('financiero:registro_list')
             except IntegrityError:
@@ -226,6 +231,8 @@ def registro_delete(request, pk):
                 f'ℹ️ Se revirtieron S/ {total_revertido:.0f} aportados a tus metas desde este registro.',
             )
         registro.delete()
+        from gamificacion.models import actualizar_racha
+        actualizar_racha(request.user)
         messages.success(request, '🗑️ Registro eliminado.')
         return redirect('financiero:registro_list')
     return render(request, 'financiero/registro_confirm_delete.html', {'registro': registro})

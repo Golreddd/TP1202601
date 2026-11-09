@@ -75,15 +75,13 @@
             <td class="text-muted">{{ u.date_joined|date:"d/m/Y" }}</td>
             <td>
               <a href="{% url 'panel_admin:user_detail' u.pk %}" class="btn btn-sm btn-outline">👁️ Ver</a>
-              {% if u != request.user %}
-                <form method="post" action="{% url 'panel_admin:user_toggle' u.pk %}"
-                      style="display:inline;" onsubmit="return confirm('¿Confirmar cambio de estado?')">
-                  {% csrf_token %}
-                  <button type="submit" class="btn btn-sm {% if u.is_active %}btn-danger{% else %}btn-success{% endif %}" style="margin-left:4px;">
-                    {% if u.is_active %}Desactivar{% else %}Activar{% endif %}
-                  </button>
-                </form>
-              {% endif %}
+              <form method="post" action="{% url 'panel_admin:user_toggle' u.pk %}"
+                    style="display:inline;" onsubmit="return confirm('¿Confirmar cambio de estado?')">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm {% if u.is_active %}btn-danger{% else %}btn-success{% endif %}" style="margin-left:4px;">
+                  {% if u.is_active %}Desactivar{% else %}Activar{% endif %}
+                </button>
+              </form>
             </td>
           </tr>
           {% empty %}

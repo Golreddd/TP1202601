@@ -6,8 +6,18 @@
 <div class="page-header">
   <div>
     <div class="page-title">⚙️ Métricas del Sistema</div>
-    <div class="page-sub">Estado y rendimiento de SmartSave</div>
+    <div class="page-sub">
+      Estado y rendimiento de SmartSave
+      {% if periodo_filtro %}— período {{ periodo_filtro }}{% endif %}
+    </div>
   </div>
+  <form method="get" class="flex gap-2" style="align-items:center;">
+    <input type="month" name="periodo" class="form-input" value="{{ periodo_filtro }}">
+    <button type="submit" class="btn btn-sm btn-primary">Filtrar</button>
+    {% if periodo_filtro %}
+      <a href="{% url 'panel_admin:metrics' %}" class="btn btn-sm btn-outline">Ver todo</a>
+    {% endif %}
+  </form>
 </div>
 
 <!-- Stats -->

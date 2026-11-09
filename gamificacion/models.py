@@ -59,6 +59,14 @@ class Racha(models.Model):
         self.save()
 
 
+def actualizar_racha(usuario):
+    """Registra actividad del usuario hoy (HU0060): crea la Racha si no existe
+    y avanza dias_consecutivos para la fecha de hoy."""
+    from datetime import date
+    racha, _ = Racha.objects.get_or_create(usuario=usuario)
+    racha.actualizar(date.today())
+
+
 class Logro(models.Model):
     """Definición de un logro desbloqueable (HU0058–HU0062)."""
     codigo = models.CharField(max_length=50, unique=True)
